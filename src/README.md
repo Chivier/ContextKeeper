@@ -1,87 +1,277 @@
-# G-Assist Python Plugin Template
+# Context Keeper Plugin for NVIDIA G-Assist
 
-Transform your ideas into powerful G-Assist plugins with our Python template! This template provides everything you need to create Windows-based plugins that seamlessly communicate with the G-Assist plugin manager. Whether you're building your first plugin or your fiftieth, this template will help you get started quickly.
+Transform your Windows development workflow with intelligent context management! This plugin lets you save and restore your complete development environment through the G-Assist platform. Whether you're switching between projects or resuming work sessions, maintaining your perfect development setup has never been easier.
 
 ## What Can It Do?
-- Built-in pipe communication with G-Assist plugin manager
-- Ready-to-use command handling system
-- Comprehensive logging system
-- Support for initialization and shutdown procedures
-- Easily extensible function framework
+- **Complete Environment Capture**: Save your entire Windows development context including:
+  - IDE projects and open files (VSCode, Cursor, JetBrains Suite)
+  - Terminal sessions with working directories and environment variables
+  - Browser tabs with full organization and grouping
+  - Document states (Office, Notion, Obsidian, OneNote)
+  - Communication tools (Slack, Discord, Teams, WeChat)
+  - System settings (volume, clipboard, window positions)
+
+- **Intelligent Restoration**: Restore your exact development environment with:
+  - Precise window positioning and sizing
+  - Virtual desktop assignments
+  - Environment variable restoration
+  - Application state recovery
+  - Browser tab groups and organization
+
+- **Voice-Activated Control**: Use natural language commands like:
+  - "Save context as pytorch-research"
+  - "Restore my machine learning project"
+  - "Quick save current setup"
 
 ## Before You Start
 Make sure you have:
-- Windows PC
-- Python 3.12 or higher
-- G-Assist installed on your system
-- pywin32 >= 223
-- Basic knowledge of Python
-
-💡 **Tip**: Use a virtual environment to keep your plugin dependencies isolated from other Python projects!
+- Windows 10/11 PC
+- Python 3.8 or higher installed
+- NVIDIA G-Assist installed
+- Visual Studio 2022 (for building)
+- Administrator privileges (for some system-level operations)
 
 ## Installation Guide
 
 ### Step 1: Get the Files
 ```bash
-git clone --recurse-submodules <repository-url>
-cd python-template
+git clone <repository-url>
+cd ContextKeeper/src
 ```
-This downloads the template and all necessary files to your computer.
+This downloads all the necessary files to your computer.
 
-### Step 2: Set Up Python Environment
+### Step 2: Install Dependencies
 ```bash
-python -m venv venv
-venv\Scripts\activate
-python -m pip install -r requirements.txt
+pip install -r requirements.txt
 ```
-This creates a clean environment and installs all required packages.
+This installs all required Python packages including:
+- `pywin32` for Windows API access
+- `psutil` for process management
+- `pywinauto` for UI automation
+- `requests` for browser debugging protocol
+- `Pillow` for favicon processing
 
-## How to Customize
-
-### Basic Command Structure
-The template comes with three example functions ready for customization:
-```python
-def execute_new_function(params: dict = None, context: dict = None, system_info: dict = None) -> dict:
-    logging.info(f'Executing new function with params: {params}')
-    # Your code here!
-    return generate_success_response('Success!')
+### Step 3: Build the Plugin
+```bash
+python build.py
 ```
+This creates the executable and prepares all necessary files.
 
-💡 **Tip**: Each function gets params, context, and system_info dictionaries - use them to make your plugin smarter!
-
-### Adding New Commands
-1. Create your function in `commands.py`:
-```python
-def execute_my_command(params: dict = None, context: dict = None, system_info: dict = None) -> dict:
-    # Your amazing code here
-    return generate_success_response('Done!')
+### Step 4: Install the Plugin
+1. Navigate to the `dist` folder created by the build script
+2. Copy the `contextkeeper` folder to:
+```bash
+%PROGRAMDATA%\NVIDIA Corporation\nvtopps\rise\plugins
 ```
 
-2. Register it in the commands dictionary:
-```python
-commands = {
-    'initialize': execute_initialize_command,
-    'my_command': execute_my_command,
-}
+💡 **Tip**: Make sure all files are copied, including:
+- The executable (`g-assist-plugin-contextkeeper.exe`)
+- `manifest.json`
+- Configuration files
+
+## How to Use
+
+### Basic Commands
+Once everything is set up, you can manage your development contexts through simple voice commands:
+
+**Saving Contexts:**
+- "Save context as [project-name]"
+- "Quick save current setup"
+- "Save my development environment"
+
+**Restoring Contexts:**
+- "Restore [project-name]"
+- "Load my pytorch project"
+- "Switch to web development context"
+
+**Management Commands:**
+- "List saved contexts"
+- "Clear current windows"
+- "Quick switch" (shows recent contexts)
+
+### Example Usage
+
+**Saving a Machine Learning Project:**
+```
+You: "Save context as pytorch-research"
+G-Assist: "Saving context 'pytorch-research'..."
+✓ Saved 8 windows
+✓ Saved 42 browser tabs
+✓ Saved 5 terminal sessions
+✓ Saved 23 environment variables
+✓ Context saved successfully!
 ```
 
-💡 **Tip**: Use descriptive command names that reflect what your function does!
+**Restoring a Web Development Environment:**
+```
+You: "Restore my react project"
+G-Assist: "Restoring 'react-project' context..."
+✓ Restored VSCode workspace
+✓ Restored 3 terminal tabs
+✓ Restored 15 browser tabs
+✓ Restored environment variables
+✓ Context restored successfully!
+```
 
-## Logging
-Your plugin automatically logs to `python_plugin.log` in your user's profile directory. It tracks:
-- Plugin startup and shutdown
-- Command reception and processing
-- Error conditions
-- Function execution details
+## Advanced Features
+
+### Environment Variable Management
+The plugin automatically saves and restores:
+- PATH configurations
+- Development tool paths (Node.js, Python, etc.)
+- API keys and tokens
+- Virtual environment activations
+- Custom environment variables
+
+### Browser Tab Organization
+Supports advanced browser features:
+- Tab groups and organization
+- Pinned tabs
+- Active tab tracking
+- Cross-browser compatibility (Chrome, Edge, Firefox, Arc)
+
+### Terminal State Preservation
+Maintains terminal configurations:
+- Working directories for each tab
+- Shell types (PowerShell, CMD, WSL)
+- Environment variables per session
+- Terminal profiles and themes
+
+## Supported Applications
+
+### IDEs and Editors
+- Visual Studio Code
+- Cursor
+- JetBrains Suite (IntelliJ, PyCharm, WebStorm, etc.)
+- Visual Studio
+
+### Terminals
+- Windows Terminal
+- PowerShell
+- Command Prompt
+- Termius
+- WSL environments
+
+### Browsers
+- Google Chrome
+- Microsoft Edge
+- Mozilla Firefox
+- Arc Browser
+
+### Document Applications
+- Microsoft Office Suite
+- Notion
+- Obsidian
+- OneNote
+- Adobe Acrobat
+
+### Communication Tools
+- Slack
+- Discord
+- Microsoft Teams
+- WeChat
 
 ## Troubleshooting Tips
-- **Plugin not starting?** Check if Python 3.12+ is installed and in PATH
-- **Communication errors?** Verify pywin32 is installed correctly
-- **Commands not working?** Double-check your command registration
-- **Missing logs?** Ensure write permissions in user profile directory
+
+### Common Issues
+- **Context not saving completely?**
+  - Run G-Assist as administrator
+  - Check if applications are responding
+  - Review the log file for specific errors
+
+- **Browser tabs not restoring?**
+  - Ensure browser allows debugging protocol
+  - Check browser settings for tab restoration
+  - Try closing and reopening the browser
+
+- **Environment variables not working?**
+  - Verify administrator privileges
+  - Check if variables are system-wide or user-specific
+  - Review environment snapshot files
+
+### Logging
+The plugin logs all activity to:
+```
+%USERPROFILE%\contextkeeper.log
+```
+Check this file for detailed error messages and debugging information.
+
+### Permission Issues
+Some operations require elevated privileges:
+- System-wide environment variables
+- Certain window management operations
+- Deep application state access
+
+## Data Structure
+
+Contexts are saved as JSON files in:
+```
+%USERPROFILE%\ContextKeeper\contexts\[context-name]\
+```
+
+Each context includes:
+- Window positions and states
+- Application configurations
+- Environment variable snapshots
+- Browser tab organizations
+- System state information
+
+## Voice Commands Reference
+
+| Command | Description | Example |
+|---------|-------------|---------|
+| `Save context as [name]` | Save current environment | "Save context as pytorch-research" |
+| `Restore [name]` | Restore saved environment | "Restore my web project" |
+| `Quick save` | Auto-save with timestamp | "Quick save current setup" |
+| `Quick switch` | Show recent contexts | "Quick switch to another project" |
+| `List contexts` | Show all saved contexts | "List my saved contexts" |
+| `Clear windows` | Close all windows safely | "Clear current windows" |
+| `Save tabs only` | Save only browser tabs | "Save my browser tabs" |
+| `Save layout only` | Save only window positions | "Save current window layout" |
+| `Restore tabs only` | Restore only browser tabs | "Restore my browser tabs" |
+| `Restore layout only` | Restore only window positions | "Restore current window layout" |
+
+## Security and Privacy
+
+### Data Protection
+- All contexts are saved locally on your machine
+- No data is transmitted to external servers
+- Environment variables are encrypted when stored
+- Sensitive information can be excluded from snapshots
+
+### Permissions
+The plugin requires:
+- File system access for saving contexts
+- Process enumeration for application detection
+- Window management permissions
+- Network access for browser tab extraction (local only)
+
+## Performance Considerations
+
+### Optimization Features
+- Incremental context saving
+- Background processing for large environments
+- Selective application targeting
+- Efficient browser tab batching
+
+### Resource Usage
+- Minimal memory footprint during idle state
+- CPU usage spikes only during save/restore operations
+- Disk usage depends on context complexity
+- Network usage limited to local browser debugging
 
 ## Want to Contribute?
-We'd love your help making this template even better! Check out [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on how to contribute.
+We'd love your help making this plugin even better! Check out [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on how to contribute.
 
 ## License
 This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+- Built using Windows APIs for native integration
+- Utilizes browser debugging protocols for tab management
+- Powered by Python automation libraries
+- We use some amazing open-source software to make this work. See [ATTRIBUTIONS.md](ATTRIBUTIONS.md) for the full list.
+
+---
+
+*Streamline your development workflow with Context Keeper - because your perfect development environment should be just a voice command away!*
