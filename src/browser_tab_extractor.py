@@ -61,14 +61,32 @@ class BrowserTabExtractor:
             tabs_data = response.json()
             
             tabs = []
-            for tab in tabs_data:
+            active_index = -1
+            
+            for idx, tab in enumerate(tabs_data):
                 if tab.get('type') == 'page':
-                    tabs.append({
+                    tab_info = {
                         'url': tab.get('url', ''),
                         'title': tab.get('title', ''),
                         'favicon': self._get_favicon_base64(tab.get('favIconUrl', '')),
-                        'active': tab.get('active', False)
-                    })
+                        'active': tab.get('active', False),
+                        'index': idx
+                    }
+                    
+                    # Try to get tab group info from title or other metadata
+                    # Chrome doesn't expose groups via debugging API directly
+                    # This would need Chrome extension or UI automation for full support
+                    tab_info['groupId'] = None
+                    tab_info['groupName'] = None
+                    
+                    if tab.get('active', False):
+                        active_index = idx
+                    
+                    tabs.append(tab_info)
+            
+            # Add active tab index to result
+            if tabs and active_index >= 0:
+                return {'tabs': tabs, 'activeIndex': active_index}
             
             return tabs
             
