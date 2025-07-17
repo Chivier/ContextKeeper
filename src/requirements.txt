@@ -25,3 +25,6 @@ requests>=2.31.0
 pillow>=10.0.0
 lz4>=4.3.2  # For Firefox session extraction
 pywinauto>=0.6.8  # For UI automation
+pycaw>=20220416  # For Windows audio control
+comtypes>=1.1.14  # For Windows COM interfaces
+winreg  # Built-in, no installation needed

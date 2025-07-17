@@ -20,6 +20,7 @@ class IDEState:
     open_files: List[str]
     window_title: str
     recent_projects: List[str]
+    window_hwnd: Optional[int] = None
 
 
 class IDETracker:
@@ -76,7 +77,8 @@ class IDETracker:
                         project_path=workspace_path,
                         open_files=open_files,
                         window_title=f"VSCode - {os.path.basename(workspace_path) if workspace_path else 'No Folder'}",
-                        recent_projects=recent_projects
+                        recent_projects=recent_projects,
+                        window_hwnd=self._get_process_main_window(proc.pid)
                     )
                     states.append(state)
                     
@@ -86,40 +88,61 @@ class IDETracker:
         return states
     
     def _get_vscode_open_files(self, process_name: str) -> List[str]:
-        """Get open files from VSCode workspace storage"""
+        """Get open files from VSCode window titles and state"""
         open_files = []
         
         try:
-            # VSCode stores workspace data in User\AppData\Roaming\Code\User\workspaceStorage
+            # Try to read from window title first
+            import win32gui
+            import win32process
+            
+            def enum_window_callback(hwnd, results):
+                if win32gui.IsWindowVisible(hwnd):
+                    _, pid = win32process.GetWindowThreadProcessId(hwnd)
+                    try:
+                        process = psutil.Process(pid)
+                        if process_name.lower() in process.name().lower():
+                            title = win32gui.GetWindowText(hwnd)
+                            if title and ' - ' in title:
+                                # VSCode title format: "filename - folder - VSCode"
+                                parts = title.split(' - ')
+                                if len(parts) >= 2:
+                                    filename = parts[0].strip()
+                                    if filename and not filename.startswith('●'):  # ● indicates unsaved
+                                        open_files.append(filename)
+                                    elif filename.startswith('●'):
+                                        open_files.append(filename[1:].strip() + ' (unsaved)')
+                    except:
+                        pass
+                return True
+            
+            win32gui.EnumWindows(enum_window_callback, None)
+            
+            # Also try to get from recent files
             app_data = os.environ.get('APPDATA')
-            if app_data:
+            if app_data and not open_files:
                 vscode_dir = 'Code'
                 if 'cursor' in process_name.lower():
                     vscode_dir = 'Cursor'
                 elif 'insiders' in process_name.lower():
                     vscode_dir = 'Code - Insiders'
                     
-                workspace_storage = os.path.join(app_data, vscode_dir, 'User', 'workspaceStorage')
-                
-                if os.path.exists(workspace_storage):
-                    # Get most recent workspace folder
-                    workspace_folders = [f for f in os.listdir(workspace_storage) if os.path.isdir(os.path.join(workspace_storage, f))]
-                    if workspace_folders:
-                        # Sort by modification time
-                        workspace_folders.sort(key=lambda x: os.path.getmtime(os.path.join(workspace_storage, x)), reverse=True)
-                        
-                        # Check state.vscdb in most recent workspace
-                        for folder in workspace_folders[:3]:  # Check top 3 most recent
-                            state_db = os.path.join(workspace_storage, folder, 'state.vscdb')
-                            if os.path.exists(state_db):
-                                # This is a SQLite database but structure is complex
-                                # For now, we'll just note that the workspace exists
-                                break
+                # Try to read recent files from backup
+                backup_dir = os.path.join(app_data, vscode_dir, 'Backups')
+                if os.path.exists(backup_dir):
+                    # Get most recent backup folders
+                    backup_folders = [f for f in os.listdir(backup_dir) if os.path.isdir(os.path.join(backup_dir, f))]
+                    for folder in backup_folders[:3]:
+                        folder_path = os.path.join(backup_dir, folder)
+                        # List files in backup
+                        for file in os.listdir(folder_path)[:5]:
+                            if file.endswith('.txt') or file.endswith('.md'):
+                                open_files.append(f"backup:{file}")
                                 
         except Exception as e:
             self.logger.warning(f"Error getting VSCode open files: {e}")
             
-        return open_files
+        return list(set(open_files))[:10]  # Return unique files, max 10
     
     def _get_vscode_recent_projects(self) -> List[str]:
         """Get recent projects from VSCode"""
@@ -448,3 +471,62 @@ class IDETracker:
                 
         os.system(' '.join(cmd_parts))
         return True
+    
+    def _get_jetbrains_open_files(self, process_name: str, pid: int) -> List[str]:
+        """Get open files from JetBrains IDE window titles"""
+        open_files = []
+        
+        try:
+            import win32gui
+            import win32process
+            
+            def enum_window_callback(hwnd, results):
+                if win32gui.IsWindowVisible(hwnd):
+                    _, window_pid = win32process.GetWindowThreadProcessId(hwnd)
+                    if window_pid == pid:
+                        title = win32gui.GetWindowText(hwnd)
+                        if title:
+                            # JetBrains title format: "filename [project] - IDE Name"
+                            # or "filename - project - IDE Name"
+                            if ' - ' in title:
+                                parts = title.split(' - ')
+                                if parts[0].strip():
+                                    filename = parts[0].strip()
+                                    # Remove project name in brackets if present
+                                    if '[' in filename and ']' in filename:
+                                        filename = filename[:filename.index('[')].strip()
+                                    open_files.append(filename)
+                return True
+            
+            win32gui.EnumWindows(enum_window_callback, None)
+            
+        except Exception as e:
+            self.logger.warning(f"Error getting JetBrains open files: {e}")
+            
+        return list(set(open_files))[:10]
+    
+    def _get_process_main_window(self, pid: int) -> Optional[int]:
+        """Get main window handle for a process"""
+        try:
+            import win32gui
+            import win32process
+            
+            main_window = None
+            
+            def enum_window_callback(hwnd, param):
+                nonlocal main_window
+                if win32gui.IsWindowVisible(hwnd):
+                    _, window_pid = win32process.GetWindowThreadProcessId(hwnd)
+                    if window_pid == pid:
+                        # Get the main window (not child windows)
+                        if not win32gui.GetParent(hwnd):
+                            main_window = hwnd
+                            return False  # Stop enumeration
+                return True
+            
+            win32gui.EnumWindows(enum_window_callback, None)
+            return main_window
+            
+        except Exception as e:
+            self.logger.warning(f"Error getting process window: {e}")
+            return None
