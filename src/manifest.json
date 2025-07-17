@@ -1,0 +1,44 @@
+{
+  "manifestVersion": 1,
+  "executable": "./g-assist-plugin-python.exe",
+  "persistent": true,
+  "functions": [
+    {
+      "name": "save_context",
+      "description": "Save current desktop context under the given name",
+      "tags": ["context", "save", "windows"],
+      "properties": {
+        "context_name": {
+          "type": "string",
+          "description": "The name to save this context as"
+        }
+      }
+    },
+    {
+      "name": "restore_context",
+      "description": "Restore a saved desktop context by name",
+      "tags": ["context", "restore", "windows"],
+      "properties": {
+        "context_name": {
+          "type": "string",
+          "description": "The name of the context to restore"
+        }
+      }
+    },
+    {
+      "name": "quick_save",
+      "description": "Quickly save current context with an auto-generated name",
+      "tags": ["context", "quick", "save"]
+    },
+    {
+      "name": "quick_switch",
+      "description": "Quickly switch between recently used contexts",
+      "tags": ["context", "switch", "recent"]
+    },
+    {
+      "name": "clear_windows",
+      "description": "Save context and close all windows",
+      "tags": ["context", "clear", "windows"]
+    }
+  ]
+}
