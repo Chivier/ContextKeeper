@@ -74,11 +74,20 @@ class TerminalManager:
                         try:
                             # Get working directory
                             cwd = child.cwd()
+                            
+                            # Try to get environment variables for this process
+                            env_vars = {}
+                            try:
+                                env_vars = self._get_process_environment(child.pid)
+                            except:
+                                pass
+                            
                             tabs.append({
                                 'profile': child.name(),
                                 'workingDirectory': cwd,
                                 'title': f"{child.name()} - {os.path.basename(cwd)}",
-                                'pid': child.pid
+                                'pid': child.pid,
+                                'environmentVariables': env_vars
                             })
                         except (psutil.AccessDenied, psutil.NoSuchProcess):
                             pass
@@ -221,6 +230,33 @@ class TerminalManager:
         self.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(process_id))
         return process_id.value if process_id.value else None
     
+    def _get_process_environment(self, pid: int) -> Dict[str, str]:
+        """Get environment variables for a process"""
+        env_vars = {}
+        
+        try:
+            process = psutil.Process(pid)
+            # Try to get environment variables
+            try:
+                env_vars = process.environ()
+            except psutil.AccessDenied:
+                # Fallback: try to get from parent process or use current environment
+                try:
+                    parent = process.parent()
+                    if parent:
+                        env_vars = parent.environ()
+                except:
+                    # Use a subset of current environment as fallback
+                    important_vars = ['PATH', 'PYTHONPATH', 'VIRTUAL_ENV', 'CONDA_DEFAULT_ENV', 
+                                    'NODE_PATH', 'JAVA_HOME', 'GOPATH', 'CARGO_HOME']
+                    for var in important_vars:
+                        if var in os.environ:
+                            env_vars[var] = os.environ[var]
+        except Exception as e:
+            self.logger.debug(f"Could not get environment for PID {pid}: {e}")
+            
+        return env_vars
+    
     def get_terminal_environment(self, process_id: int) -> Dict[str, str]:
         """Try to get environment variables from a terminal process"""
         env_vars = {}
@@ -290,6 +326,12 @@ class TerminalManager:
                         cmd_parts.extend(['powershell.exe'])
                     elif 'cmd' in profile.lower():
                         cmd_parts.extend(['cmd.exe'])
+                
+                # Handle environment variables
+                env_vars = tab.get('environmentVariables', {})
+                if env_vars:
+                    # Create a batch file to set environment and launch terminal
+                    self._create_env_batch_for_tab(tab, i)
                         
             # Execute command
             os.system(' '.join(cmd_parts))
@@ -310,3 +352,39 @@ class TerminalManager:
             wd = tab.get('workingDirectory', os.getcwd())
             if os.path.exists(wd):
                 os.system(f'start powershell -NoExit -Command "Set-Location -Path \'{wd}\'"')
+    
+    def _create_env_batch_for_tab(self, tab: Dict, tab_index: int) -> str:
+        """Create a batch file to set environment variables for a tab"""
+        try:
+            import tempfile
+            from datetime import datetime
+            
+            # Create temp batch file
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            batch_file = os.path.join(tempfile.gettempdir(), f'terminal_env_{timestamp}_{tab_index}.bat')
+            
+            with open(batch_file, 'w', encoding='utf-8') as f:
+                f.write('@echo off\n')
+                f.write(f'REM Terminal environment restoration\n')
+                f.write(f'REM Tab: {tab.get("title", "Unknown")}\n\n')
+                
+                # Set environment variables
+                env_vars = tab.get('environmentVariables', {})
+                for key, value in env_vars.items():
+                    # Escape special characters
+                    value = value.replace('%', '%%').replace('"', '""')
+                    f.write(f'set "{key}={value}"\n')
+                
+                # Change to working directory
+                wd = tab.get('workingDirectory')
+                if wd and os.path.exists(wd):
+                    f.write(f'\ncd /d "{wd}"\n')
+                
+                # Keep window open
+                f.write('\ncmd /k\n')
+            
+            return batch_file
+            
+        except Exception as e:
+            self.logger.error(f"Error creating env batch: {e}")
+            return None
