@@ -177,3 +177,6 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+.g_assist_env_*.json
+restore_env_*.bat

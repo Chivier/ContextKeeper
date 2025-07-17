@@ -456,6 +456,17 @@ class ContextKeeper:
                     saved_pos.get("state") == "maximized",
                     saved_pos.get("state") == "minimized"
                 )
+    
+    def list_contexts(self) -> List[str]:
+        """List all saved contexts"""
+        contexts = []
+        
+        if DATA_DIR.exists():
+            for context_dir in DATA_DIR.iterdir():
+                if context_dir.is_dir() and (context_dir / "context.json").exists():
+                    contexts.append(context_dir.name)
+                    
+        return sorted(contexts)
 
 
 # Global instance

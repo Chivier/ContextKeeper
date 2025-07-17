@@ -13,9 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-python_requires='>=3.12'  # If using the 'type' keyword
-# OR
-python_requires='>=3.7'   # If using the alternative TypeAlias or Dict annotation
+# Python version requirement should be in setup.py or pyproject.toml, not here
+# This file is for pip packages only
 
 pywin32>=223
 psutil>=5.9.0
@@ -27,4 +26,3 @@ lz4>=4.3.2  # For Firefox session extraction
 pywinauto>=0.6.8  # For UI automation
 pycaw>=20220416  # For Windows audio control
 comtypes>=1.1.14  # For Windows COM interfaces
-winreg  # Built-in, no installation needed
