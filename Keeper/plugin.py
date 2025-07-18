@@ -7,14 +7,33 @@ from pathlib import Path
 from typing import Optional, Dict, List
 import traceback
 
-import psutil
-import pygetwindow as gw
-import pyperclip
+# Handle optional imports gracefully
+try:
+    import psutil
+except ImportError:
+    psutil = None
+    logging.warning("psutil not available - process names will be limited")
+
+try:
+    import pygetwindow as gw
+except ImportError:
+    gw = None
+    logging.warning("pygetwindow not available")
+
+try:
+    import pyperclip
+except ImportError:
+    pyperclip = None
+    logging.warning("pyperclip not available - clipboard operations disabled")
 
 # Import our components
 from environment_manager import EnvironmentManager
 from windows_context_manager import WindowsContextManager, WindowInfo
 from browser_tab_extractor import BrowserTabExtractor
+try:
+    from browser_tab_extractor_fast import FastBrowserTabExtractor
+except ImportError:
+    FastBrowserTabExtractor = None
 from terminal_manager import TerminalManager
 from ide_tracker import IDETracker
 from document_tracker import DocumentTracker
@@ -39,13 +58,19 @@ class ContextKeeper:
         self.env_manager = EnvironmentManager()
         self.windows_manager = WindowsContextManager()
         self.browser_extractor = BrowserTabExtractor()
+        self.fast_browser_extractor = FastBrowserTabExtractor() if FastBrowserTabExtractor else None
         self.terminal_manager = TerminalManager()
         self.ide_tracker = IDETracker()
         self.document_tracker = DocumentTracker()
         self.logger = logging.getLogger(__name__)
+        self._last_context_time = 0
+        self._context_cache = None
         
-    def keep_context(self, context_name: str) -> Dict:
+    def keep_context(self, context_name: str, quick_mode: bool = False) -> Dict:
         """Keep complete context as per DESIGN.md"""
+        import time
+        start_time = time.time()
+        
         context_data = {
             "contextName": context_name,
             "timestamp": datetime.now().isoformat() + "Z",
@@ -59,11 +84,12 @@ class ContextKeeper:
         }
         
         try:
-            # Check for unsaved documents first
-            unsaved_docs = self.document_tracker.check_unsaved_documents()
-            if unsaved_docs:
-                self.logger.warning(f"Found {len(unsaved_docs)} unsaved documents")
-                # In a real implementation, this would prompt the user
+            self.logger.info(f"Starting context save for '{context_name}'")
+            # Skip document check in quick mode
+            if not quick_mode:
+                unsaved_docs = self.document_tracker.check_unsaved_documents()
+                if unsaved_docs:
+                    self.logger.warning(f"Found {len(unsaved_docs)} unsaved documents")
                 
             # Save system state
             context_data["windows"]["system"] = self._save_system_state()
@@ -78,16 +104,22 @@ class ContextKeeper:
             # Save clipboard
             self._save_clipboard(context_name)
             
-            # Get document states
-            document_states = self.document_tracker.get_document_states()
-            context_data["documents"] = document_states
+            # Skip document states in quick mode
+            if not quick_mode:
+                document_states = self.document_tracker.get_document_states()
+                context_data["documents"] = document_states
             
             # Get all windows
             windows = self.windows_manager.enum_windows()
+            self.logger.info(f"Found {len(windows)} windows to process")
+            
+            # Debug: Log window details
+            for window in windows:
+                self.logger.info(f"Window: {window.title[:50]}... Process: {window.process_name}")
             
             # Process windows by type
             for window in windows:
-                self._process_window(window, context_data)
+                self._process_window(window, context_data, quick_mode)
             
             # Save the main context file
             context_path = DATA_DIR / context_name
@@ -96,10 +128,12 @@ class ContextKeeper:
             with open(context_path / "context.json", "w", encoding="utf-8") as f:
                 json.dump(context_data, f, indent=2)
                 
-            # Clean up old environment snapshots
-            self.env_manager.cleanup_old_snapshots(context_name, keep_last=10)
+            # Skip cleanup in quick mode
+            if not quick_mode:
+                self.env_manager.cleanup_old_snapshots(context_name, keep_last=10)
             
-            self.logger.info(f"Context '{context_name}' kept successfully")
+            elapsed = time.time() - start_time
+            self.logger.info(f"Context '{context_name}' kept successfully in {elapsed:.2f} seconds")
             return context_data
             
         except Exception as e:
@@ -192,6 +226,10 @@ class ContextKeeper:
     
     def _save_clipboard(self, context_name: str):
         """Keep clipboard content"""
+        if not pyperclip:
+            self.logger.debug("Clipboard capture skipped - pyperclip not available")
+            return
+            
         try:
             clipboard_data = pyperclip.paste()
             clipboard_path = DATA_DIR / context_name / "clipboard_cache.txt"
@@ -200,24 +238,29 @@ class ContextKeeper:
         except Exception as e:
             self.logger.warning(f"Failed to capture clipboard: {e}")
     
-    def _process_window(self, window: WindowInfo, context_data: Dict):
+    def _process_window(self, window: WindowInfo, context_data: Dict, quick_mode: bool = False):
         """Process a window and add to appropriate category"""
         process_name = window.process_name.lower()
+        self.logger.debug(f"Processing window: {window.title[:30]}... from process: {process_name}")
         
         # Check if it's a browser
         if any(browser in process_name for browser in ['chrome', 'firefox', 'edge', 'msedge']):
-            self._process_browser_window(window, context_data)
+            self.logger.info(f"Found browser window: {process_name}")
+            self._process_browser_window(window, context_data, quick_mode)
         # Check if it's a terminal
         elif any(term in process_name for term in ['terminal', 'cmd', 'powershell', 'pwsh', 'termius']):
+            self.logger.info(f"Found terminal window: {process_name}")
             self._process_terminal_window(window, context_data)
         # Check if it's an IDE
         elif any(ide in process_name for ide in ['code', 'cursor', 'pycharm', 'idea', 'sublime', 'notepad++']):
+            self.logger.info(f"Found IDE window: {process_name}")
             self._process_ide_window(window, context_data)
         # Other applications
         else:
+            self.logger.debug(f"Found other application: {process_name}")
             self._process_application_window(window, context_data)
     
-    def _process_browser_window(self, window: WindowInfo, context_data: Dict):
+    def _process_browser_window(self, window: WindowInfo, context_data: Dict, quick_mode: bool = False):
         """Process browser window"""
         browser_type = 'chrome'
         if 'firefox' in window.process_name.lower():
@@ -229,12 +272,15 @@ class ContextKeeper:
         tabs_result = []
         active_index = 0
         
+        # Use fast extractor in quick mode
+        extractor = self.fast_browser_extractor if (quick_mode and self.fast_browser_extractor) else self.browser_extractor
+        
         if browser_type == 'chrome':
-            result = self.browser_extractor.extract_chrome_tabs()
+            result = extractor.extract_chrome_tabs()
         elif browser_type == 'edge':
-            result = self.browser_extractor.extract_edge_tabs()
+            result = extractor.extract_edge_tabs()
         elif browser_type == 'firefox':
-            result = self.browser_extractor.extract_firefox_tabs()
+            result = extractor.extract_firefox_tabs() if not quick_mode else []
         else:
             result = []
             
@@ -354,10 +400,11 @@ class ContextKeeper:
                 
             # Restore clipboard
             try:
-                clipboard_file = context_path / "clipboard_cache.txt"
-                if clipboard_file.exists():
-                    clipboard_data = clipboard_file.read_text(encoding="utf-8")
-                    pyperclip.copy(clipboard_data)
+                if pyperclip:
+                    clipboard_file = context_path / "clipboard_cache.txt"
+                    if clipboard_file.exists():
+                        clipboard_data = clipboard_file.read_text(encoding="utf-8")
+                        pyperclip.copy(clipboard_data)
             except Exception as e:
                 self.logger.warning(f"Failed to restore clipboard: {e}")
                 
@@ -491,8 +538,8 @@ def log_context(context_name: str):
 def quick_keep(params: dict = None, context: dict = None, system_info: dict = None) -> dict:
     context_name = "auto-" + datetime.now().strftime("%Y%m%d-%H%M%S")
     try:
-        # Keep the context and get detailed data
-        context_data = context_keeper.keep_context(context_name)
+        # Keep the context and get detailed data (always use quick mode)
+        context_data = context_keeper.keep_context(context_name, quick_mode=True)
         log_context(context_name)
         
         # Count items for summary
@@ -622,13 +669,40 @@ def memorize(params: dict = None, context: dict = None, system_info: dict = None
     """Magic spell to memorize current realm (workspace)"""
     if not params:
         return generate_failure_response("Parameters required.")
+    
     # Support multiple parameter names: realm as project, realm_name, and context_name
     context_name = params.get("realm") or params.get("project") or params.get("realm_name") or params.get("context_name", "unnamed")
+    quick_mode = params.get("quick", True)  # Default to quick mode for better performance
     
     try:
-        # Keep the context and get detailed data
-        context_data = context_keeper.keep_context(context_name)
-        log_context(context_name)
+        # For quick response, save minimal context first
+        if quick_mode:
+            # Just log the intent immediately
+            log_context(context_name)
+            
+            # Start the actual save in a thread
+            import threading
+            save_result = {}
+            
+            def save_context():
+                save_result['data'] = context_keeper.keep_context(context_name, quick_mode=True)
+            
+            thread = threading.Thread(target=save_context)
+            thread.start()
+            
+            # Wait briefly (max 0.3 seconds for faster response)
+            thread.join(timeout=0.3)
+            
+            if thread.is_alive():
+                # Return immediate response while save continues
+                return generate_success_response(f"Saving {context_name} workspace...")
+            else:
+                # Completed quickly, return full details
+                context_data = save_result.get('data', {})
+        else:
+            # Full mode - do everything synchronously
+            context_data = context_keeper.keep_context(context_name, quick_mode=quick_mode)
+            log_context(context_name)
         
         # Extract statistics from the saved context
         windows_count = len(context_data.get("windows", {}).get("applications", []))
@@ -740,7 +814,7 @@ def write_response(response: Response) -> None:
     try:
         STD_OUTPUT_HANDLE = -11
         pipe = windll.kernel32.GetStdHandle(STD_OUTPUT_HANDLE)
-        json_message = json.dumps(response)
+        json_message = json.dumps(response) + "<<END>>"
         message_bytes = json_message.encode("utf-8")
         message_len = len(message_bytes)
         windll.kernel32.WriteFile(

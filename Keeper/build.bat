@@ -39,11 +39,17 @@ if exist %VENV% (
         --name %PLUGIN_NAME% ^
         --distpath "%PLUGIN_DIR%" ^
         --add-data "manifest.json;." ^
+        --add-data "browser_tab_extractor_fast.py;." ^
         --hidden-import=win32com.client ^
         --hidden-import=pycaw ^
         --hidden-import=comtypes ^
         --hidden-import=pywinauto ^
         --hidden-import=lz4 ^
+        --hidden-import=psutil ^
+        --hidden-import=requests ^
+        --hidden-import=pyperclip ^
+        --hidden-import=pygetwindow ^
+        --hidden-import=PIL ^
         --exclude-module=matplotlib ^
         --exclude-module=numpy ^
         --exclude-module=pandas ^

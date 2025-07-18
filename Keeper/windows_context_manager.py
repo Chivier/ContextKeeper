@@ -1,10 +1,27 @@
 import ctypes
 import ctypes.wintypes
 import logging
-import psutil
 import time
 from typing import Dict, List, Optional, Callable
 from dataclasses import dataclass
+
+# Handle optional psutil import
+try:
+    import psutil
+except ImportError:
+    psutil = None
+
+
+# Define WINDOWPLACEMENT structure since it's not in ctypes.wintypes
+class WINDOWPLACEMENT(ctypes.Structure):
+    _fields_ = [
+        ("length", ctypes.c_uint),
+        ("flags", ctypes.c_uint),
+        ("showCmd", ctypes.c_uint),
+        ("ptMinPosition", ctypes.wintypes.POINT),
+        ("ptMaxPosition", ctypes.wintypes.POINT),
+        ("rcNormalPosition", ctypes.wintypes.RECT)
+    ]
 
 
 @dataclass
@@ -30,6 +47,18 @@ class WindowsContextManager:
         self.logger = logging.getLogger(__name__)
         self.user32 = ctypes.windll.user32
         self.kernel32 = ctypes.windll.kernel32
+        
+        # Declare Windows API functions that might not be available
+        try:
+            self.kernel32.QueryFullProcessImageNameW.argtypes = [
+                ctypes.wintypes.HANDLE,
+                ctypes.wintypes.DWORD,
+                ctypes.wintypes.LPWSTR,
+                ctypes.POINTER(ctypes.wintypes.DWORD)
+            ]
+            self.kernel32.QueryFullProcessImageNameW.restype = ctypes.wintypes.BOOL
+        except:
+            pass
         
     def enum_windows(self) -> List[WindowInfo]:
         """Enumerate all windows and return their information"""
@@ -99,14 +128,41 @@ class WindowsContextManager:
             
             # Get process name
             try:
-                process = psutil.Process(process_id.value)
-                process_name = process.name()
-            except:
-                process_name = "Unknown"
+                if psutil:
+                    process = psutil.Process(process_id.value)
+                    process_name = process.name()
+                else:
+                    raise ImportError("psutil not available")
+            except Exception as e:
+                # Fallback method using Windows API
+                try:
+                    # Open process with limited rights
+                    PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+                    h_process = self.kernel32.OpenProcess(
+                        PROCESS_QUERY_LIMITED_INFORMATION,
+                        False,
+                        process_id.value
+                    )
+                    if h_process:
+                        # Get process name
+                        exe_name = ctypes.create_unicode_buffer(260)
+                        size = ctypes.wintypes.DWORD(260)
+                        if self.kernel32.QueryFullProcessImageNameW(
+                            h_process, 0, exe_name, ctypes.byref(size)
+                        ):
+                            import os
+                            process_name = os.path.basename(exe_name.value)
+                        else:
+                            process_name = "Unknown"
+                        self.kernel32.CloseHandle(h_process)
+                    else:
+                        process_name = "Unknown"
+                except:
+                    process_name = "Unknown"
             
             # Get window state
-            placement = ctypes.wintypes.WINDOWPLACEMENT()
-            placement.length = ctypes.sizeof(placement)
+            placement = WINDOWPLACEMENT()
+            placement.length = ctypes.sizeof(WINDOWPLACEMENT)
             self.user32.GetWindowPlacement(hwnd, ctypes.byref(placement))
             
             is_maximized = placement.showCmd == 3  # SW_MAXIMIZE
