@@ -44,8 +44,21 @@ class FastBrowserTabExtractor:
         return self._extract_chromium_tabs_fast('chrome')
     
     def extract_edge_tabs(self) -> List[Dict]:
-        """Extract Edge tabs - fast version"""
-        return self._extract_chromium_tabs_fast('msedge')
+        """Extract Edge tabs - fast version with fallback"""
+        # First try fast method
+        tabs = self._extract_chromium_tabs_fast('msedge')
+        if tabs:
+            return tabs
+            
+        # If no debugging port, try importing full extractor for fallback
+        try:
+            from browser_tab_extractor import BrowserTabExtractor
+            extractor = BrowserTabExtractor()
+            # This will try session files and UI automation
+            return extractor.extract_edge_tabs()
+        except Exception as e:
+            self.logger.debug(f"Fallback Edge extraction failed: {e}")
+            return []
     
     def _extract_chromium_tabs_fast(self, browser_name: str) -> List[Dict]:
         """Fast extraction without favicons or heavy operations"""

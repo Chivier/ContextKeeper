@@ -123,8 +123,9 @@ class WhitelistManager:
         whitelist = self.get_whitelist()
         
         # Check process name (case insensitive)
+        process_name_lower = process_name.lower()
         for wl_item in whitelist:
-            if wl_item.lower() == process_name.lower():
+            if wl_item.lower() == process_name_lower:
                 return True
         
         # Check window title patterns

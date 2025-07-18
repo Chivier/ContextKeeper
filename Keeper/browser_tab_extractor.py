@@ -58,8 +58,23 @@ class BrowserTabExtractor:
         return self._extract_chromium_tabs('chrome')
     
     def extract_edge_tabs(self) -> List[Dict]:
-        """Extract Edge tabs using debugging protocol"""
-        return self._extract_chromium_tabs('msedge')
+        """Extract Edge tabs using multiple methods in order of preference:
+        1. Debugging protocol (if available)
+        2. Session/recovery files
+        3. UI automation (fallback)
+        """
+        # First try debugging protocol
+        tabs = self._extract_chromium_tabs('msedge')
+        if tabs:
+            return tabs
+            
+        # Try session files as second option
+        tabs = self._extract_edge_session_tabs()
+        if tabs:
+            return tabs
+            
+        # UI automation will be tried as last resort inside _extract_chromium_tabs
+        return []
     
     def _extract_chromium_tabs(self, browser_name: str) -> List[Dict]:
         """Extract tabs from Chromium-based browsers (Chrome, Edge).
@@ -80,8 +95,9 @@ class BrowserTabExtractor:
             # Find Chrome/Edge debugging port
             debug_port = self._find_chromium_debug_port(browser_name)
             if not debug_port:
-                self.logger.warning(f"No {browser_name} debugging port found")
-                return []
+                self.logger.warning(f"No {browser_name} debugging port found, trying UI automation")
+                # Try UI automation as fallback
+                return self._extract_chromium_tabs_ui_automation(browser_name)
             
             # Get tab list
             response = requests.get(f'http://localhost:{debug_port}/json', timeout=5)
@@ -120,6 +136,270 @@ class BrowserTabExtractor:
         except Exception as e:
             self.logger.error(f"Error extracting {browser_name} tabs: {e}")
             return []
+    
+    def _extract_chromium_tabs_ui_automation(self, browser_name: str) -> List[Dict]:
+        """Extract tabs using UI automation as fallback when debugging port is not available.
+        
+        This method uses pywinauto to interact with the browser UI and extract tab information.
+        It's slower and less reliable than the debugging protocol but works without special flags.
+        
+        Args:
+            browser_name: 'chrome' or 'msedge'
+            
+        Returns:
+            List of tab dictionaries
+        """
+        try:
+            import pywinauto
+            from pywinauto import Application
+            import time
+            
+            # Find browser windows
+            windows = []
+            process_name = 'chrome.exe' if browser_name == 'chrome' else 'msedge.exe'
+            
+            # Get all browser windows
+            import psutil
+            import win32gui
+            import win32process
+            
+            def enum_window_callback(hwnd, windows):
+                if win32gui.IsWindowVisible(hwnd):
+                    _, pid = win32process.GetWindowThreadProcessId(hwnd)
+                    try:
+                        proc = psutil.Process(pid)
+                        if proc.name().lower() == process_name.lower():
+                            window_text = win32gui.GetWindowText(hwnd)
+                            if window_text and ('Microsoft​ Edge' in window_text or 'Google Chrome' in window_text or 'Edge' in window_text):
+                                windows.append((hwnd, window_text))
+                    except:
+                        pass
+                return True
+            
+            win32gui.EnumWindows(enum_window_callback, windows)
+            
+            if not windows:
+                self.logger.warning(f"No {browser_name} windows found for UI automation")
+                return []
+            
+            tabs = []
+            # For each browser window, extract its title (contains current tab info)
+            for hwnd, window_title in windows:
+                # Edge window title format: "Page Title - Microsoft​ Edge"
+                # Chrome window title format: "Page Title - Google Chrome"
+                if ' - Microsoft​ Edge' in window_title:
+                    title = window_title.replace(' - Microsoft​ Edge', '').strip()
+                elif ' - Microsoft Edge' in window_title:  # Sometimes without special character
+                    title = window_title.replace(' - Microsoft Edge', '').strip()
+                elif ' - Google Chrome' in window_title:
+                    title = window_title.replace(' - Google Chrome', '').strip()
+                else:
+                    title = window_title
+                
+                # Try to extract URL using accessibility APIs
+                try:
+                    app = Application(backend='uia').connect(handle=hwnd)
+                    window = app.window(handle=hwnd)
+                    
+                    # Try to find address bar and get URL
+                    url = ''
+                    try:
+                        # For Edge/Chrome, the address bar is usually named "Address and search bar"
+                        address_bar = window.child_window(title_re=".*Address.*", control_type="Edit")
+                        if address_bar.exists():
+                            url = address_bar.get_value()
+                    except:
+                        pass
+                    
+                    # If we have at least a title, add it as a tab
+                    if title:
+                        tabs.append({
+                            'url': url or 'unknown',
+                            'title': title,
+                            'favicon': '',
+                            'active': True,  # We can't determine which tab is active easily
+                            'window_id': hwnd
+                        })
+                    
+                except Exception as e:
+                    # Fallback: just use window title
+                    if title:
+                        tabs.append({
+                            'url': 'unknown',
+                            'title': title,
+                            'favicon': '',
+                            'active': True,
+                            'window_id': hwnd
+                        })
+            
+            self.logger.info(f"Extracted {len(tabs)} tabs from {browser_name} using UI automation")
+            return tabs
+            
+        except Exception as e:
+            self.logger.error(f"Error in UI automation for {browser_name}: {e}")
+            return []
+    
+    def _extract_edge_session_tabs(self) -> List[Dict]:
+        """Extract Edge tabs from session/recovery files.
+        
+        Edge stores session data in various locations that we can parse
+        to get tab information even without debugging access.
+        
+        Returns:
+            List of tab dictionaries
+        """
+        try:
+            import json
+            import os
+            
+            # Edge user data locations
+            local_app_data = os.environ.get('LOCALAPPDATA')
+            if not local_app_data:
+                return []
+                
+            edge_user_data = os.path.join(local_app_data, 'Microsoft', 'Edge', 'User Data')
+            if not os.path.exists(edge_user_data):
+                return []
+            
+            all_tabs = []
+            
+            # Check each profile directory
+            for item in os.listdir(edge_user_data):
+                profile_path = os.path.join(edge_user_data, item)
+                if os.path.isdir(profile_path) and (item == 'Default' or item.startswith('Profile')):
+                    # Look for session files
+                    session_files = [
+                        'Current Session',
+                        'Last Session',
+                        'Current Tabs',
+                        'Last Tabs'
+                    ]
+                    
+                    for session_file in session_files:
+                        session_path = os.path.join(profile_path, session_file)
+                        if os.path.exists(session_path):
+                            tabs = self._parse_edge_session_file(session_path)
+                            if tabs:
+                                all_tabs.extend(tabs)
+                                break  # Use first valid session file found
+                    
+                    # Also check Sessions folder
+                    sessions_folder = os.path.join(profile_path, 'Sessions')
+                    if os.path.exists(sessions_folder):
+                        # Get most recent session file
+                        session_files = [f for f in os.listdir(sessions_folder) if f.startswith('Session_')]
+                        if session_files:
+                            session_files.sort(reverse=True)  # Most recent first
+                            session_path = os.path.join(sessions_folder, session_files[0])
+                            tabs = self._parse_edge_session_file(session_path)
+                            if tabs:
+                                all_tabs.extend(tabs)
+            
+            # Remove duplicates based on URL
+            seen_urls = set()
+            unique_tabs = []
+            for tab in all_tabs:
+                if tab['url'] not in seen_urls:
+                    seen_urls.add(tab['url'])
+                    unique_tabs.append(tab)
+            
+            self.logger.info(f"Extracted {len(unique_tabs)} unique Edge tabs from session files")
+            return unique_tabs
+            
+        except Exception as e:
+            self.logger.error(f"Error extracting Edge session tabs: {e}")
+            return []
+    
+    def _parse_edge_session_file(self, file_path: str) -> List[Dict]:
+        """Parse an Edge session file to extract tab information.
+        
+        Edge session files use a binary SNSS format that contains URLs and titles.
+        This method attempts to extract readable information from these files.
+        
+        Args:
+            file_path: Path to the session file
+            
+        Returns:
+            List of tab dictionaries
+        """
+        tabs = []
+        try:
+            with open(file_path, 'rb') as f:
+                content = f.read()
+            
+            # Convert to string, ignoring decode errors
+            text_content = content.decode('utf-8', errors='ignore')
+            
+            # Look for URLs using various patterns
+            import re
+            
+            # Pattern for http/https URLs
+            url_pattern = re.compile(r'https?://[^\s\x00-\x1f\x7f-\x9f<>"{}|\\^`\[\]]+')
+            urls = url_pattern.findall(text_content)
+            
+            # Try to find associated titles (usually near URLs in the file)
+            for url in urls:
+                if url.startswith('http'):
+                    # Skip internal Chrome/Edge URLs
+                    if any(skip in url for skip in ['edge://', 'chrome://', 'about:', 'data:', 'blob:']):
+                        continue
+                    
+                    # Create tab entry
+                    tab = {
+                        'url': url,
+                        'title': self._extract_title_near_url(text_content, url) or url,
+                        'favicon': '',
+                        'active': False
+                    }
+                    tabs.append(tab)
+            
+            return tabs
+            
+        except Exception as e:
+            self.logger.error(f"Error parsing Edge session file {file_path}: {e}")
+            return []
+    
+    def _extract_title_near_url(self, content: str, url: str) -> Optional[str]:
+        """Try to extract a title near a URL in session file content.
+        
+        This is a heuristic approach that looks for readable text near the URL.
+        
+        Args:
+            content: The file content as string
+            url: The URL to find title for
+            
+        Returns:
+            Title if found, None otherwise
+        """
+        try:
+            # Find URL position
+            pos = content.find(url)
+            if pos == -1:
+                return None
+            
+            # Look for title in surrounding text (before URL is common)
+            start = max(0, pos - 500)
+            end = pos
+            
+            surrounding = content[start:end]
+            
+            # Extract readable strings (at least 3 chars, no control chars)
+            import re
+            readable_pattern = re.compile(r'[^\x00-\x1f\x7f-\x9f]{3,}')
+            readable_strings = readable_pattern.findall(surrounding)
+            
+            # Get the last few readable strings before URL (likely title)
+            if readable_strings:
+                # Filter out URLs and very long strings
+                candidates = [s for s in readable_strings[-5:] 
+                             if not s.startswith('http') and len(s) < 200]
+                if candidates:
+                    return candidates[-1].strip()
+            
+            return None
+            
+        except:
+            return None
     
     def _find_chromium_debug_port(self, browser_name: str) -> Optional[int]:
         """Find the debugging port for Chrome/Edge.

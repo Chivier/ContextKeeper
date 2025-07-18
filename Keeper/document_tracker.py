@@ -37,7 +37,7 @@ class DocumentTracker:
         
         # Check Word documents
         try:
-            word = win32com.client.Dispatch("Word.Application")
+            word = win32com.client.GetActiveObject("Word.Application")
             for doc in word.Documents:
                 documents.append({
                     "type": "word",
@@ -53,7 +53,7 @@ class DocumentTracker:
         
         # Check Excel documents
         try:
-            excel = win32com.client.Dispatch("Excel.Application")
+            excel = win32com.client.GetActiveObject("Excel.Application")
             for wb in excel.Workbooks:
                 documents.append({
                     "type": "excel",
@@ -69,7 +69,7 @@ class DocumentTracker:
             
         # Check PowerPoint documents
         try:
-            ppt = win32com.client.Dispatch("PowerPoint.Application")
+            ppt = win32com.client.GetActiveObject("PowerPoint.Application")
             for pres in ppt.Presentations:
                 documents.append({
                     "type": "powerpoint",

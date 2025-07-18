@@ -93,7 +93,7 @@ class WindowsContextManager:
         hwnd = self.user32.GetTopWindow(0)
         
         while hwnd:
-            if self.user32.IsWindowVisible(hwnd):
+            if self.user32.IsWindowVisible(hwnd) and self.user32.GetAncestor(hwnd, 2) == hwnd:
                 z_order_map[hwnd] = z_index
                 z_index += 1
             hwnd = self.user32.GetWindow(hwnd, 2)  # GW_HWNDNEXT
@@ -242,23 +242,58 @@ class WindowsContextManager:
                               is_maximized: bool = False, is_minimized: bool = False) -> bool:
         """Restore a window to a specific position and state"""
         try:
-            # First restore the window if it's minimized
-            if is_minimized:
-                self.user32.ShowWindow(hwnd, 6)  # SW_MINIMIZE
-            elif is_maximized:
-                self.user32.ShowWindow(hwnd, 3)  # SW_MAXIMIZE
-            else:
+            # Check if window still exists
+            if not self.user32.IsWindow(hwnd):
+                return False
+                
+            # First, restore the window to a normal state if it's maximized or minimized
+            if is_maximized or is_minimized:
                 self.user32.ShowWindow(hwnd, 9)  # SW_RESTORE
-                # Set window position
-                self.user32.SetWindowPos(
-                    hwnd, 0, x, y, width, height,
-                    0x0040  # SWP_SHOWWINDOW
-                )
+                time.sleep(0.05)  # Give window time to restore
+
+            # Set window position without changing Z-order
+            self.user32.SetWindowPos(
+                hwnd, 0, x, y, width, height,
+                0x0004  # SWP_NOZORDER - don't change Z-order here
+            )
+
+            # Now, set the final state
+            if is_maximized:
+                self.user32.ShowWindow(hwnd, 3)  # SW_MAXIMIZE
+            elif is_minimized:
+                self.user32.ShowWindow(hwnd, 6)  # SW_MINIMIZE
             
             return True
             
         except Exception as e:
             self.logger.error(f"Error restoring window position: {e}")
+            return False
+    
+    def set_window_z_order(self, hwnd: int, z_order: int) -> bool:
+        """Set window Z-order by bringing it to top without activation"""
+        try:
+            if not self.user32.IsWindow(hwnd):
+                return False
+                
+            # Constants for SetWindowPos
+            HWND_TOP = 0
+            HWND_BOTTOM = 1
+            SWP_NOMOVE = 0x0002
+            SWP_NOSIZE = 0x0001
+            SWP_NOACTIVATE = 0x0010
+            SWP_SHOWWINDOW = 0x0040
+            
+            # For lower z_order values (higher in stack), bring to top
+            if z_order < 10:
+                self.user32.SetWindowPos(
+                    hwnd, HWND_TOP,
+                    0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW
+                )
+            
+            return True
+        except Exception as e:
+            self.logger.error(f"Error setting window Z-order: {e}")
             return False
     
     def minimize_all_windows(self, whitelist_checker=None) -> Dict[str, int]:
@@ -379,11 +414,16 @@ class WindowsContextManager:
                 # Try graceful close first
                 self.logger.info(f"Closing {window.process_name}: {window.title}")
                 
-                # Send WM_CLOSE message
-                result = self.user32.SendMessageW(window.hwnd, WM_CLOSE, 0, 0)
+                # Send WM_CLOSE message - try both Post and Send
+                self.user32.PostMessageW(window.hwnd, WM_CLOSE, 0, 0)
                 
                 # Give the window time to close gracefully
                 time.sleep(0.1)
+                
+                # If still open, try SendMessage (blocks until processed)
+                if self.user32.IsWindow(window.hwnd):
+                    self.user32.SendMessageW(window.hwnd, WM_CLOSE, 0, 0)
+                    time.sleep(0.1)
                 
                 # Check if window still exists
                 if self.user32.IsWindow(window.hwnd):

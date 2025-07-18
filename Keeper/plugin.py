@@ -547,6 +547,7 @@ class ContextKeeper:
             saved_by_process[process_name].append(saved)
         
         # Restore windows in reverse Z-order (bottom to top)
+        # This ensures proper layering as we build up the window stack
         for saved_window in reversed(all_saved_windows):
             process_name = saved_window.get("processName", "").lower()
             
@@ -563,20 +564,13 @@ class ContextKeeper:
                         saved_window.get("state") == "minimized"
                     )
                     
-                    # Bring window to correct Z-order position
-                    if saved_window.get("zOrder", 999) < 100:  # Only for reasonably positioned windows
-                        try:
-                            # Use SetWindowPos to set Z-order
-                            HWND_TOP = 0
-                            SWP_NOMOVE = 0x0002
-                            SWP_NOSIZE = 0x0001
-                            self.windows_manager.user32.SetWindowPos(
-                                window.hwnd, HWND_TOP,
-                                0, 0, 0, 0,
-                                SWP_NOMOVE | SWP_NOSIZE
-                            )
-                        except:
-                            pass
+                    # Set Z-order using the new method
+                    z_order = saved_window.get("zOrder", 999)
+                    if z_order < 100:  # Only for reasonably positioned windows
+                        self.windows_manager.set_window_z_order(window.hwnd, z_order)
+                    
+                    import time
+                    time.sleep(0.05)  # Small delay between windows
                     break
     
     def list_contexts(self) -> List[str]:
@@ -1116,7 +1110,32 @@ def clear_history(params: dict = None, context: dict = None, system_info: dict =
         
         # Remove the context directory and all its contents
         import shutil
-        shutil.rmtree(context_path)
+        import threading
+        
+        delete_result = {'success': False, 'error': None}
+        
+        def delete_context():
+            try:
+                shutil.rmtree(context_path)
+                logging.info(f"Cleared context history for '{context_name}'")
+                delete_result['success'] = True
+            except Exception as e:
+                logging.error(f"Error deleting context '{context_name}': {e}")
+                delete_result['error'] = str(e)
+
+        thread = threading.Thread(target=delete_context)
+        thread.start()
+        
+        # Wait for deletion to complete (max 2 seconds)
+        thread.join(timeout=2.0)
+        
+        if thread.is_alive():
+            # Still deleting, but we'll return success
+            logging.warning(f"Context deletion still in progress for '{context_name}'")
+        elif not delete_result['success']:
+            # Deletion failed
+            if delete_result['error']:
+                return generate_failure_response(f"❌ Failed to delete workspace: {delete_result['error']}")
         
         # Remove from index if exists
         if INDEX_FILE.exists():
@@ -1127,8 +1146,6 @@ def clear_history(params: dict = None, context: dict = None, system_info: dict =
                     INDEX_FILE.write_text(json.dumps(index, indent=2))
             except:
                 pass
-        
-        logging.info(f"Cleared context history for '{context_name}'")
         
         message = f"🗑️ **Workspace Deleted**\n\n"
         message += f"📌 **Name:** {context_name}\n"
@@ -1152,9 +1169,10 @@ def clear_all_history(params: dict = None, context: dict = None, system_info: di
         if count == 0:
             return generate_success_response("📭 No saved workspaces to delete.")
         
-        # Remove all context directories
+        # Remove all context directories with proper error handling
         import shutil
         deleted_count = 0
+        failed_count = 0
         if DATA_DIR.exists():
             for context_dir in DATA_DIR.iterdir():
                 if context_dir.is_dir():
@@ -1163,6 +1181,7 @@ def clear_all_history(params: dict = None, context: dict = None, system_info: di
                         deleted_count += 1
                     except Exception as e:
                         logging.error(f"Failed to remove {context_dir}: {e}")
+                        failed_count += 1
         
         # Clear the index file
         if INDEX_FILE.exists():

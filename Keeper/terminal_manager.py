@@ -44,57 +44,89 @@ class TerminalManager:
     def _extract_windows_terminal_tabs(self, hwnd: int) -> List[Dict]:
         """Extract Windows Terminal tabs information"""
         tabs = []
-        
         try:
-            # Try to get info from Windows Terminal settings
-            local_app_data = os.environ.get('LOCALAPPDATA')
-            if local_app_data:
-                settings_path = os.path.join(
-                    local_app_data, 
-                    'Packages',
-                    'Microsoft.WindowsTerminal_8wekyb3d8bbwe',
-                    'LocalState',
-                    'settings.json'
-                )
-                
-                if os.path.exists(settings_path):
-                    with open(settings_path, 'r', encoding='utf-8') as f:
-                        settings = json.load(f)
-                        # Extract profile information
-                        profiles = settings.get('profiles', {}).get('list', [])
-                        
-            # Get process information for each tab
-            # This is limited without UI automation
-            process_id = self._get_window_process_id(hwnd)
-            if process_id:
-                # Try to find child processes
-                parent_process = psutil.Process(process_id)
-                for child in parent_process.children(recursive=True):
-                    if child.name() in ['cmd.exe', 'powershell.exe', 'pwsh.exe', 'bash.exe', 'wsl.exe']:
-                        try:
-                            # Get working directory
-                            cwd = child.cwd()
-                            
-                            # Try to get environment variables for this process
-                            env_vars = {}
-                            try:
-                                env_vars = self._get_process_environment(child.pid)
-                            except:
-                                pass
-                            
-                            tabs.append({
-                                'profile': child.name(),
-                                'workingDirectory': cwd,
-                                'title': f"{child.name()} - {os.path.basename(cwd)}",
-                                'pid': child.pid,
-                                'environmentVariables': env_vars
-                            })
-                        except (psutil.AccessDenied, psutil.NoSuchProcess):
-                            pass
-                            
+            import pywinauto
+            app = pywinauto.Application(backend='uia').connect(handle=hwnd)
+            main_window = app.window(handle=hwnd)
+            tab_control = main_window.child_window(control_type="Tab")
+            for tab_item in tab_control.children():
+                tab_title = tab_item.window_text()
+                # Get the working directory by examining the process of the active tab
+                working_directory = os.getcwd()
+                try:
+                    tab_item.select()
+                    # It's difficult to get the process for a specific tab, so we'll just use the main process's CWD
+                    process_id = self._get_window_process_id(hwnd)
+                    if process_id:
+                        process = psutil.Process(process_id)
+                        # Find the shell process associated with the tab
+                        for child in process.children(recursive=True):
+                            if child.name() in ['cmd.exe', 'powershell.exe', 'pwsh.exe']:
+                                working_directory = child.cwd()
+                                break
+                except Exception as e:
+                    self.logger.warning(f"Could not get working directory for tab '{tab_title}': {e}")
+
+                tabs.append({
+                    'profile': 'Unknown',
+                    'workingDirectory': working_directory,
+                    'title': tab_title
+                })
         except Exception as e:
-            self.logger.warning(f"Error extracting Windows Terminal tabs: {e}")
-            
+            self.logger.warning(f"Error extracting Windows Terminal tabs with UI Automation: {e}")
+
+        # If UI automation fails, fall back to the original method
+        if not tabs:
+            try:
+                # Try to get info from Windows Terminal settings
+                local_app_data = os.environ.get('LOCALAPPDATA')
+                if local_app_data:
+                    settings_path = os.path.join(
+                        local_app_data, 
+                        'Packages',
+                        'Microsoft.WindowsTerminal_8wekyb3d8bbwe',
+                        'LocalState',
+                        'settings.json'
+                    )
+                    
+                    if os.path.exists(settings_path):
+                        with open(settings_path, 'r', encoding='utf-8') as f:
+                            settings = json.load(f)
+                            # Extract profile information
+                            profiles = settings.get('profiles', {}).get('list', [])
+                            
+                # Get process information for each tab
+                # This is limited without UI automation
+                process_id = self._get_window_process_id(hwnd)
+                if process_id:
+                    # Try to find child processes
+                    parent_process = psutil.Process(process_id)
+                    for child in parent_process.children(recursive=True):
+                        if child.name() in ['cmd.exe', 'powershell.exe', 'pwsh.exe', 'bash.exe', 'wsl.exe']:
+                            try:
+                                # Get working directory
+                                cwd = child.cwd()
+                                
+                                # Try to get environment variables for this process
+                                env_vars = {}
+                                try:
+                                    env_vars = self._get_process_environment(child.pid)
+                                except:
+                                    pass
+                                
+                                tabs.append({
+                                    'profile': child.name(),
+                                    'workingDirectory': cwd,
+                                    'title': f"{child.name()} - {os.path.basename(cwd)}",
+                                    'pid': child.pid,
+                                    'environmentVariables': env_vars
+                                })
+                            except (psutil.AccessDenied, psutil.NoSuchProcess):
+                                pass
+                                
+            except Exception as e:
+                self.logger.warning(f"Error extracting Windows Terminal tabs: {e}")
+        
         # If no tabs found, at least return one with basic info
         if not tabs:
             tabs.append({

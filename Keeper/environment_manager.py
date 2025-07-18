@@ -24,10 +24,10 @@ class EnvironmentManager:
         
         # Save to file with specific naming pattern
         env_file = f".g_assist_env_{timestamp}.json"
-        env_path = os.path.join("contexts", context_name, env_file)
+        env_path = Path("contexts") / context_name / env_file
         
         # Ensure directory exists
-        os.makedirs(os.path.dirname(env_path), exist_ok=True)
+        env_path.parent.mkdir(parents=True, exist_ok=True)
         
         # Save all environment variables
         with open(env_path, 'w', encoding='utf-8') as f:
@@ -39,7 +39,7 @@ class EnvironmentManager:
     def restore_environment(self, context_name: str) -> str:
         """Restore environment variables from the latest file"""
         # Find all environment files for this context
-        pattern = os.path.join("contexts", context_name, ".g_assist_env_*.json")
+        pattern = str(Path("contexts") / context_name / ".g_assist_env_*.json")
         env_files = glob.glob(pattern)
         
         if not env_files:

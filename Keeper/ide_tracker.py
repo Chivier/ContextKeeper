@@ -90,57 +90,63 @@ class IDETracker:
     def _get_vscode_open_files(self, process_name: str) -> List[str]:
         """Get open files from VSCode window titles and state"""
         open_files = []
-        
         try:
-            # Try to read from window title first
-            import win32gui
-            import win32process
-            
-            def enum_window_callback(hwnd, results):
-                if win32gui.IsWindowVisible(hwnd):
-                    _, pid = win32process.GetWindowThreadProcessId(hwnd)
-                    try:
-                        process = psutil.Process(pid)
-                        if process_name.lower() in process.name().lower():
-                            title = win32gui.GetWindowText(hwnd)
-                            if title and ' - ' in title:
-                                # VSCode title format: "filename - folder - VSCode"
-                                parts = title.split(' - ')
-                                if len(parts) >= 2:
-                                    filename = parts[0].strip()
-                                    if filename and not filename.startswith('●'):  # ● indicates unsaved
-                                        open_files.append(filename)
-                                    elif filename.startswith('●'):
-                                        open_files.append(filename[1:].strip() + ' (unsaved)')
-                    except:
-                        pass
-                return True
-            
-            win32gui.EnumWindows(enum_window_callback, None)
-            
-            # Also try to get from recent files
             app_data = os.environ.get('APPDATA')
-            if app_data and not open_files:
+            if app_data:
                 vscode_dir = 'Code'
                 if 'cursor' in process_name.lower():
                     vscode_dir = 'Cursor'
                 elif 'insiders' in process_name.lower():
                     vscode_dir = 'Code - Insiders'
+                
+                storage_file = os.path.join(app_data, vscode_dir, 'User', 'globalStorage', 'storage.json')
+                if os.path.exists(storage_file):
+                    with open(storage_file, 'r', encoding='utf-8') as f:
+                        storage_data = json.load(f)
                     
-                # Try to read recent files from backup
-                backup_dir = os.path.join(app_data, vscode_dir, 'Backups')
-                if os.path.exists(backup_dir):
-                    # Get most recent backup folders
-                    backup_folders = [f for f in os.listdir(backup_dir) if os.path.isdir(os.path.join(backup_dir, f))]
-                    for folder in backup_folders[:3]:
-                        folder_path = os.path.join(backup_dir, folder)
-                        # List files in backup
-                        for file in os.listdir(folder_path)[:5]:
-                            if file.endswith('.txt') or file.endswith('.md'):
-                                open_files.append(f"backup:{file}")
-                                
+                    # Look for entries that contain file paths
+                    for key, value in storage_data.items():
+                        if isinstance(value, str) and 'file' in value and 'uri' in value:
+                            try:
+                                file_info = json.loads(value)
+                                if isinstance(file_info, dict) and 'entries' in file_info:
+                                    for entry in file_info['entries']:
+                                        if 'resource' in entry and 'path' in entry['resource']:
+                                            open_files.append(entry['resource']['path'])
+                            except:
+                                pass
         except Exception as e:
-            self.logger.warning(f"Error getting VSCode open files: {e}")
+            self.logger.warning(f"Error getting VSCode open files from storage.json: {e}")
+
+        # Fallback to window titles if storage.json parsing fails
+        if not open_files:
+            try:
+                import win32gui
+                import win32process
+                
+                def enum_window_callback(hwnd, results):
+                    if win32gui.IsWindowVisible(hwnd):
+                        _, pid = win32process.GetWindowThreadProcessId(hwnd)
+                        try:
+                            process = psutil.Process(pid)
+                            if process_name.lower() in process.name().lower():
+                                title = win32gui.GetWindowText(hwnd)
+                                if title and ' - ' in title:
+                                    # VSCode title format: "filename - folder - VSCode"
+                                    parts = title.split(' - ')
+                                    if len(parts) >= 2:
+                                        filename = parts[0].strip()
+                                        if filename and not filename.startswith('●'):  # ● indicates unsaved
+                                            open_files.append(filename)
+                                        elif filename.startswith('●'):
+                                            open_files.append(filename[1:].strip() + ' (unsaved)')
+                        except:
+                            pass
+                    return True
+                
+                win32gui.EnumWindows(enum_window_callback, None)
+            except Exception as e:
+                self.logger.warning(f"Error getting VSCode open files from window titles: {e}")
             
         return list(set(open_files))[:10]  # Return unique files, max 10
     
@@ -209,7 +215,7 @@ class IDETracker:
                         type=ide_name.lower().replace(' ', '_'),
                         process_name=proc.info['name'],
                         project_path=project_path,
-                        open_files=[],  # JetBrains stores this in project-specific files
+                        open_files=self._get_jetbrains_open_files(proc.info['name'], proc.pid),
                         window_title=f"{ide_name}",
                         recent_projects=recent_projects
                     )
