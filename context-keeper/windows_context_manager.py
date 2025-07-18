@@ -2,6 +2,7 @@ import ctypes
 import ctypes.wintypes
 import logging
 import psutil
+import time
 from typing import Dict, List, Optional, Callable
 from dataclasses import dataclass
 
@@ -199,3 +200,83 @@ class WindowsContextManager:
             hwnd = self.user32.GetWindow(hwnd, 2)  # GW_HWNDNEXT
             
         return z_order
+    
+    def close_all_windows(self, exclude_process_names: List[str] = None, force: bool = False) -> Dict[str, int]:
+        """Close all visible windows with safety checks
+        
+        Args:
+            exclude_process_names: List of process names to exclude from closing (e.g., ['explorer.exe'])
+            force: If True, use TerminateProcess for unresponsive windows (dangerous!)
+            
+        Returns:
+            Dict with counts: {'closed': n, 'failed': n, 'excluded': n}
+        """
+        if exclude_process_names is None:
+            # Default exclusions to prevent system instability
+            exclude_process_names = [
+                'explorer.exe',  # Windows Explorer
+                'dwm.exe',       # Desktop Window Manager
+                'taskmgr.exe',   # Task Manager
+                'systemsettings.exe',  # Settings
+                'shellexperiencehost.exe',  # Start Menu
+                'searchui.exe',  # Search
+                'cortana.exe',   # Cortana
+                'runtimebroker.exe',  # Runtime Broker
+                'python.exe',    # Don't close ourselves
+                'pythonw.exe',   # Don't close ourselves
+                'g-assist-plugin-python.exe'  # Don't close the plugin
+            ]
+        
+        exclude_lower = [name.lower() for name in exclude_process_names]
+        counts = {'closed': 0, 'failed': 0, 'excluded': 0}
+        windows = self.enum_windows()
+        
+        # Define constants
+        WM_CLOSE = 0x0010
+        PROCESS_TERMINATE = 0x0001
+        
+        for window in windows:
+            try:
+                # Skip if in exclusion list
+                if window.process_name.lower() in exclude_lower:
+                    counts['excluded'] += 1
+                    self.logger.info(f"Excluded {window.process_name}: {window.title}")
+                    continue
+                
+                # Skip minimized windows (already "cleared")
+                if window.is_minimized:
+                    continue
+                
+                # Try graceful close first
+                self.logger.info(f"Closing {window.process_name}: {window.title}")
+                
+                # Send WM_CLOSE message
+                result = self.user32.SendMessageW(window.hwnd, WM_CLOSE, 0, 0)
+                
+                # Give the window time to close gracefully
+                time.sleep(0.1)
+                
+                # Check if window still exists
+                if self.user32.IsWindow(window.hwnd):
+                    if force:
+                        # Force close if requested
+                        self.logger.warning(f"Force closing {window.process_name}")
+                        handle = self.kernel32.OpenProcess(PROCESS_TERMINATE, False, window.process_id)
+                        if handle:
+                            self.kernel32.TerminateProcess(handle, 0)
+                            self.kernel32.CloseHandle(handle)
+                            counts['closed'] += 1
+                        else:
+                            counts['failed'] += 1
+                    else:
+                        self.logger.warning(f"Window didn't close gracefully: {window.title}")
+                        counts['failed'] += 1
+                else:
+                    counts['closed'] += 1
+                    
+            except Exception as e:
+                self.logger.error(f"Error closing window {window.title}: {e}")
+                counts['failed'] += 1
+        
+        self.logger.info(f"Close windows summary: {counts}")
+        return counts

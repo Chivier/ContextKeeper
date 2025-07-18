@@ -37,8 +37,13 @@
     },
     {
       "name": "clear_windows",
-      "description": "Save context and close all windows",
-      "tags": ["context", "clear", "windows"]
+      "description": "Save context and close all windows (excludes system processes)",
+      "tags": ["context", "clear", "close", "windows"]
+    },
+    {
+      "name": "minimize_windows",
+      "description": "Save context and minimize all windows (safer alternative to clear_windows)",
+      "tags": ["context", "minimize", "windows"]
     }
   ]
 }

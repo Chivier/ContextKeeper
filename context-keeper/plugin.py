@@ -516,6 +516,34 @@ def quick_switch(*_):
 def clear_windows(*_):
     temp_name = "autosave-" + datetime.now().strftime("%Y%m%d-%H%M%S")
     try:
+        # Check for unsaved documents before closing
+        unsaved_docs = context_keeper.document_tracker.check_unsaved_documents()
+        if unsaved_docs:
+            doc_list = "\n".join([f"- {doc['application']}: {doc['title']}" for doc in unsaved_docs])
+            logging.warning(f"Found {len(unsaved_docs)} unsaved documents:\n{doc_list}")
+            # In a real implementation, this would prompt the user
+        
+        # Save context first
+        context_keeper.save_context(temp_name)
+        log_context(temp_name)
+        
+        # Close all windows (excluding system processes)
+        counts = context_keeper.windows_manager.close_all_windows(force=False)
+        
+        return generate_success_response(
+            f"Context saved as '{temp_name}'. "
+            f"Closed: {counts['closed']} windows, "
+            f"Failed: {counts['failed']}, "
+            f"Excluded: {counts['excluded']} system processes."
+        )
+    except Exception as e:
+        return generate_failure_response(f"Clear windows failed: {str(e)}")
+
+
+def minimize_windows(*_):
+    """Safer alternative that just minimizes windows instead of closing them"""
+    temp_name = "autosave-" + datetime.now().strftime("%Y%m%d-%H%M%S")
+    try:
         context_keeper.save_context(temp_name)
         log_context(temp_name)
         
@@ -524,7 +552,7 @@ def clear_windows(*_):
         
         return generate_success_response(f"Context saved as '{temp_name}' and {count} windows minimized.")
     except Exception as e:
-        return generate_failure_response(f"Clear windows failed: {str(e)}")
+        return generate_failure_response(f"Minimize windows failed: {str(e)}")
 
 
 def save_context(params=None, *_):
@@ -624,6 +652,7 @@ def main():
         "quick_save": quick_save,
         "quick_switch": quick_switch,
         "clear_windows": clear_windows,
+        "minimize_windows": minimize_windows,
     }
     cmd = ""
     while cmd != "shutdown":
