@@ -38,6 +38,7 @@ class WindowInfo:
     is_maximized: bool
     is_minimized: bool
     is_visible: bool
+    z_order: int = 0  # Window stacking order (0 = topmost)
 
 
 class WindowsContextManager:
@@ -64,6 +65,17 @@ class WindowsContextManager:
         """Enumerate all windows and return their information"""
         windows = []
         
+        # First get Z-order using GetTopWindow/GetWindow
+        z_order_map = {}
+        z_index = 0
+        hwnd = self.user32.GetTopWindow(0)
+        
+        while hwnd:
+            if self.user32.IsWindowVisible(hwnd):
+                z_order_map[hwnd] = z_index
+                z_index += 1
+            hwnd = self.user32.GetWindow(hwnd, 2)  # GW_HWNDNEXT
+        
         # Define callback function type
         EnumWindowsProc = ctypes.WINFUNCTYPE(
             ctypes.c_bool,
@@ -83,8 +95,8 @@ class WindowsContextManager:
                 if not title:
                     return True
                 
-                # Get window info
-                window_info = self._get_window_info(hwnd)
+                # Get window info with Z-order
+                window_info = self._get_window_info(hwnd, z_order_map.get(hwnd, 999))
                 if window_info:
                     windows.append(window_info)
                     
@@ -96,6 +108,9 @@ class WindowsContextManager:
         # Create callback and enumerate windows
         callback = EnumWindowsProc(enum_windows_callback)
         self.user32.EnumWindows(callback, 0)
+        
+        # Sort by Z-order
+        windows.sort(key=lambda w: w.z_order)
         
         return windows
     
@@ -109,7 +124,7 @@ class WindowsContextManager:
         self.user32.GetWindowTextW(hwnd, buffer, length + 1)
         return buffer.value
     
-    def _get_window_info(self, hwnd: int) -> Optional[WindowInfo]:
+    def _get_window_info(self, hwnd: int, z_order: int = 999) -> Optional[WindowInfo]:
         """Get detailed window information"""
         try:
             # Get window title
@@ -180,7 +195,8 @@ class WindowsContextManager:
                 height=rect.bottom - rect.top,
                 is_maximized=is_maximized,
                 is_minimized=is_minimized,
-                is_visible=is_visible
+                is_visible=is_visible,
+                z_order=z_order
             )
             
         except Exception as e:
@@ -270,7 +286,7 @@ class WindowsContextManager:
             
         return z_order
     
-    def close_all_windows(self, exclude_process_names: List[str] = None, force: bool = False) -> Dict[str, int]:
+    def close_all_windows(self, exclude_process_names: List[str] = None, force: bool = False, whitelist_checker=None) -> Dict[str, int]:
         """Close all visible windows with safety checks
         
         Args:
@@ -297,7 +313,7 @@ class WindowsContextManager:
             ]
         
         exclude_lower = [name.lower() for name in exclude_process_names]
-        counts = {'closed': 0, 'failed': 0, 'excluded': 0}
+        counts = {'closed': 0, 'failed': 0, 'excluded': 0, 'whitelisted': 0}
         windows = self.enum_windows()
         
         # Define constants
@@ -310,6 +326,12 @@ class WindowsContextManager:
                 if window.process_name.lower() in exclude_lower:
                     counts['excluded'] += 1
                     self.logger.info(f"Excluded {window.process_name}: {window.title}")
+                    continue
+                
+                # Check whitelist if checker provided
+                if whitelist_checker and whitelist_checker(window.process_name, window.title):
+                    counts['whitelisted'] += 1
+                    self.logger.info(f"Skipping whitelisted: {window.title} [{window.process_name}]")
                     continue
                 
                 # Skip minimized windows (already "cleared")

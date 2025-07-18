@@ -305,7 +305,8 @@ class ContextKeeper:
                 "width": window.width,
                 "height": window.height,
                 "state": "maximized" if window.is_maximized else "normal",
-                "virtualDesktop": self._get_window_virtual_desktop(window.hwnd)
+                "virtualDesktop": self._get_window_virtual_desktop(window.hwnd),
+                "zOrder": window.z_order
             }
         }
         
@@ -328,7 +329,8 @@ class ContextKeeper:
                 "width": window.width,
                 "height": window.height,
                 "state": "maximized" if window.is_maximized else "normal",
-                "virtualDesktop": self._get_window_virtual_desktop(window.hwnd)
+                "virtualDesktop": self._get_window_virtual_desktop(window.hwnd),
+                "zOrder": window.z_order
             }
         }
         
@@ -358,7 +360,8 @@ class ContextKeeper:
                     "width": window.width,
                     "height": window.height,
                     "state": "maximized" if window.is_maximized else "normal",
-                    "virtualDesktop": 1  # Would need virtual desktop detection
+                    "virtualDesktop": 1,  # Would need virtual desktop detection
+                    "zOrder": window.z_order
                 }
             }
             
@@ -376,7 +379,8 @@ class ContextKeeper:
                 "width": window.width,
                 "height": window.height,
                 "state": "maximized" if window.is_maximized else "normal",
-                "virtualDesktop": self._get_window_virtual_desktop(window.hwnd)
+                "virtualDesktop": self._get_window_virtual_desktop(window.hwnd),
+                "zOrder": window.z_order
             }
         }
         
@@ -478,33 +482,65 @@ class ContextKeeper:
         """Restore window positions for existing windows"""
         current_windows = self.windows_manager.enum_windows()
         
-        # Create a mapping of process names to saved window data
-        saved_windows = {}
+        # Create a list of all saved windows with their data
+        all_saved_windows = []
         
         # Add applications
         for app in context_data.get("windows", {}).get("applications", []):
-            process_name = app.get("processName", "").lower()
-            saved_windows[process_name] = app.get("window", {})
+            window_data = app.get("window", {})
+            window_data["processName"] = app.get("processName", "")
+            window_data["title"] = app.get("title", "")
+            all_saved_windows.append(window_data)
             
         # Add browsers
         for browser in context_data.get("browsers", []):
-            process_name = browser.get("processName", "").lower()
-            saved_windows[process_name] = browser.get("window", {})
+            window_data = browser.get("window", {})
+            window_data["processName"] = browser.get("processName", "")
+            all_saved_windows.append(window_data)
+        
+        # Sort saved windows by Z-order (lowest z_order = topmost)
+        all_saved_windows.sort(key=lambda w: w.get("zOrder", 999))
+        
+        # Create process name mapping for quick lookup
+        saved_by_process = {}
+        for saved in all_saved_windows:
+            process_name = saved.get("processName", "").lower()
+            if process_name not in saved_by_process:
+                saved_by_process[process_name] = []
+            saved_by_process[process_name].append(saved)
+        
+        # Restore windows in reverse Z-order (bottom to top)
+        for saved_window in reversed(all_saved_windows):
+            process_name = saved_window.get("processName", "").lower()
             
-        # Restore positions
-        for window in current_windows:
-            process_name = window.process_name.lower()
-            if process_name in saved_windows:
-                saved_pos = saved_windows[process_name]
-                self.windows_manager.restore_window_position(
-                    window.hwnd,
-                    saved_pos.get("x", window.x),
-                    saved_pos.get("y", window.y),
-                    saved_pos.get("width", window.width),
-                    saved_pos.get("height", window.height),
-                    saved_pos.get("state") == "maximized",
-                    saved_pos.get("state") == "minimized"
-                )
+            # Find matching current window
+            for window in current_windows:
+                if window.process_name.lower() == process_name:
+                    self.windows_manager.restore_window_position(
+                        window.hwnd,
+                        saved_window.get("x", window.x),
+                        saved_window.get("y", window.y),
+                        saved_window.get("width", window.width),
+                        saved_window.get("height", window.height),
+                        saved_window.get("state") == "maximized",
+                        saved_window.get("state") == "minimized"
+                    )
+                    
+                    # Bring window to correct Z-order position
+                    if saved_window.get("zOrder", 999) < 100:  # Only for reasonably positioned windows
+                        try:
+                            # Use SetWindowPos to set Z-order
+                            HWND_TOP = 0
+                            SWP_NOMOVE = 0x0002
+                            SWP_NOSIZE = 0x0001
+                            self.windows_manager.user32.SetWindowPos(
+                                window.hwnd, HWND_TOP,
+                                0, 0, 0, 0,
+                                SWP_NOMOVE | SWP_NOSIZE
+                            )
+                        except:
+                            pass
+                    break
     
     def list_contexts(self) -> List[str]:
         """List all saved contexts"""
@@ -627,27 +663,35 @@ def list_contexts(params: dict = None, context: dict = None, system_info: dict =
 
 def clear_windows(params: dict = None, context: dict = None, system_info: dict = None) -> dict:
     temp_name = "autokeep-" + datetime.now().strftime("%Y%m%d-%H%M%S")
+    aggressive = params.get("aggressive", False) if params else False
+    
     try:
         # Check for unsaved documents before closing
-        unsaved_docs = context_keeper.document_tracker.check_unsaved_documents()
-        if unsaved_docs:
-            doc_list = "\n".join([f"- {doc['application']}: {doc['title']}" for doc in unsaved_docs])
-            logging.warning(f"Found {len(unsaved_docs)} unsaved documents:\n{doc_list}")
-            # In a real implementation, this would prompt the user
+        if not aggressive:  # Skip check in aggressive mode
+            unsaved_docs = context_keeper.document_tracker.check_unsaved_documents()
+            if unsaved_docs:
+                doc_list = "\n".join([f"- {doc['application']}: {doc['title']}" for doc in unsaved_docs])
+                logging.warning(f"Found {len(unsaved_docs)} unsaved documents:\n{doc_list}")
         
         # Keep context first
         context_keeper.keep_context(temp_name)
         log_context(temp_name)
         
-        # Close all windows (excluding system processes)
-        counts = context_keeper.windows_manager.close_all_windows(force=False)
-        
-        return generate_success_response(
-            f"Context kept as '{temp_name}'. "
-            f"Closed: {counts['closed']} windows, "
-            f"Failed: {counts['failed']}, "
-            f"Excluded: {counts['excluded']} system processes."
+        # Close all windows (force=True in aggressive mode)
+        counts = context_keeper.windows_manager.close_all_windows(
+            force=aggressive,
+            whitelist_checker=context_keeper.whitelist_manager.is_whitelisted
         )
+        
+        message = f"Context kept as '{temp_name}'.\n"
+        if aggressive:
+            message += "AGGRESSIVE MODE: Force closing applications.\n"
+        message += f"Closed: {counts['closed']} windows\n"
+        message += f"Failed: {counts['failed']}\n"
+        message += f"Protected (whitelisted): {counts.get('whitelisted', 0)}\n"
+        message += f"System processes: {counts['excluded']}"
+        
+        return generate_success_response(message)
     except Exception as e:
         return generate_failure_response(f"Clear windows failed: {str(e)}")
 
@@ -812,6 +856,78 @@ def list_whitelist(params: dict = None, context: dict = None, system_info: dict 
         return generate_failure_response(f"Failed to list whitelist: {str(e)}")
 
 
+def clear_history(params: dict = None, context: dict = None, system_info: dict = None) -> dict:
+    """Clear/delete a specific saved context"""
+    if not params:
+        return generate_failure_response("Parameters required.")
+    
+    # Support multiple parameter names like memorize function
+    context_name = params.get("realm") or params.get("project") or params.get("realm_name") or params.get("context_name", "")
+    context_name = context_name.strip()
+    if not context_name:
+        return generate_failure_response("Context name required.")
+    
+    try:
+        context_path = DATA_DIR / context_name
+        
+        # Check if context exists
+        if not context_path.exists():
+            return generate_failure_response(f"Context '{context_name}' not found.")
+        
+        # Remove the context directory and all its contents
+        import shutil
+        shutil.rmtree(context_path)
+        
+        # Remove from index if exists
+        if INDEX_FILE.exists():
+            try:
+                index = json.loads(INDEX_FILE.read_text(encoding="utf-8"))
+                if context_name in index:
+                    index.remove(context_name)
+                    INDEX_FILE.write_text(json.dumps(index, indent=2))
+            except:
+                pass
+        
+        logging.info(f"Cleared context history for '{context_name}'")
+        return generate_success_response(f"Context '{context_name}' has been deleted.")
+        
+    except Exception as e:
+        logging.error(f"Clear history failed: {e}\n{traceback.format_exc()}")
+        return generate_failure_response(f"Failed to clear history for '{context_name}': {str(e)}")
+
+
+def clear_all_history(params: dict = None, context: dict = None, system_info: dict = None) -> dict:
+    """Clear all saved contexts - use with caution!"""
+    try:
+        # Count contexts before deletion
+        contexts = context_keeper.list_contexts()
+        count = len(contexts)
+        
+        if count == 0:
+            return generate_success_response("No saved contexts to clear.")
+        
+        # Remove all context directories
+        import shutil
+        if DATA_DIR.exists():
+            for context_dir in DATA_DIR.iterdir():
+                if context_dir.is_dir():
+                    try:
+                        shutil.rmtree(context_dir)
+                    except Exception as e:
+                        logging.error(f"Failed to remove {context_dir}: {e}")
+        
+        # Clear the index file
+        if INDEX_FILE.exists():
+            INDEX_FILE.write_text(json.dumps([], indent=2))
+        
+        logging.info(f"Cleared all {count} contexts")
+        return generate_success_response(f"Cleared all {count} saved contexts.")
+        
+    except Exception as e:
+        logging.error(f"Clear all history failed: {e}\n{traceback.format_exc()}")
+        return generate_failure_response(f"Failed to clear all history: {str(e)}")
+
+
 def restore_context(params: dict = None, context: dict = None, system_info: dict = None) -> dict:
     if not params:
         return generate_failure_response("Parameters required.")
@@ -939,6 +1055,8 @@ def main():
         'add_to_whitelist': add_to_whitelist,
         'remove_from_whitelist': remove_from_whitelist,
         'list_whitelist': list_whitelist,
+        'clear_history': clear_history,
+        'clear_all_history': clear_all_history,
     }
     
     cmd = ''
