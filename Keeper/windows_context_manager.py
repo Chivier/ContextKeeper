@@ -42,7 +42,17 @@ class WindowInfo:
 
 
 class WindowsContextManager:
-    """Manages Windows-specific context operations using Windows API"""
+    """Manages Windows-specific context operations using Windows API.
+    
+    This class provides low-level Windows integration for:
+    - Window enumeration with Z-order tracking
+    - Process name resolution (with psutil fallback)
+    - Window state capture (position, size, maximized/minimized)
+    - Window restoration with proper layering
+    - Minimize/close operations with safety checks
+    
+    Uses ctypes for direct Windows API access for maximum compatibility.
+    """
     
     def __init__(self):
         self.logger = logging.getLogger(__name__)
@@ -62,7 +72,19 @@ class WindowsContextManager:
             pass
         
     def enum_windows(self) -> List[WindowInfo]:
-        """Enumerate all windows and return their information"""
+        """Enumerate all visible windows with complete information.
+        
+        This method performs two passes:
+        1. First pass: Build Z-order map using GetTopWindow/GetWindow chain
+           This gives us the exact stacking order of windows
+        2. Second pass: Use EnumWindows to get all window details
+           EnumWindows is more reliable but doesn't provide Z-order
+           
+        The combination ensures we get all windows with correct layering.
+        
+        Returns:
+            List of WindowInfo objects sorted by Z-order (topmost first)
+        """
         windows = []
         
         # First get Z-order using GetTopWindow/GetWindow
@@ -240,10 +262,15 @@ class WindowsContextManager:
             return False
     
     def minimize_all_windows(self, whitelist_checker=None) -> Dict[str, int]:
-        """Minimize all visible windows except whitelisted ones
+        """Minimize all visible windows except whitelisted ones.
+        
+        This is a non-destructive operation that preserves all application
+        states while providing a clean desktop. Whitelisted apps remain
+        visible for continued use (e.g., NVIDIA apps, G-Assist).
         
         Args:
-            whitelist_checker: Optional function that takes (process_name, window_title) and returns bool
+            whitelist_checker: Optional function that takes (process_name, window_title)
+                             and returns True if window should stay visible
             
         Returns:
             Dict with counts: {'minimized': n, 'skipped': n}
@@ -287,14 +314,25 @@ class WindowsContextManager:
         return z_order
     
     def close_all_windows(self, exclude_process_names: List[str] = None, force: bool = False, whitelist_checker=None) -> Dict[str, int]:
-        """Close all visible windows with safety checks
+        """Close all visible windows with safety checks.
+        
+        This method attempts to close windows gracefully using WM_CLOSE.
+        In aggressive mode (force=True), it will terminate processes that
+        don't respond. System-critical processes are always protected.
+        
+        Safety features:
+        - Default exclusion list for system stability
+        - Whitelist support for user-protected apps
+        - Graceful close attempt before force terminate
+        - Skip already minimized windows
         
         Args:
-            exclude_process_names: List of process names to exclude from closing (e.g., ['explorer.exe'])
-            force: If True, use TerminateProcess for unresponsive windows (dangerous!)
+            exclude_process_names: Additional processes to exclude
+            force: Enable aggressive mode with process termination
+            whitelist_checker: Function to check if app is protected
             
         Returns:
-            Dict with counts: {'closed': n, 'failed': n, 'excluded': n}
+            Dict with counts: {'closed': n, 'failed': n, 'excluded': n, 'whitelisted': n}
         """
         if exclude_process_names is None:
             # Default exclusions to prevent system instability

@@ -2,19 +2,6 @@
 
 Transform your Windows development workflow with intelligent context management! This plugin lets you keep and restore your complete development environment through the G-Assist platform. Whether you're switching between projects or resuming work sessions, maintaining your perfect development setup has never been easier.
 
-## 🎯 Important: Magic Commands API
-
-To avoid conflicts with G-Assist's gaming features (like instant replay), Keeper uses **magic-themed commands**:
-
-- **`Memorize`** instead of "save" or "keep"
-- **`Recall`** instead of "restore" 
-- **`Snapshot`** for quick saves
-- **`Grimoire`** to list saved contexts
-- **`Timeshift`** to switch to recent context
-- **`Vanish`** to save & close all
-- **`Shroud`** to save & minimize all
-
-Example: Say "Memorize realm as project1" instead of "save workspace as project1"
 
 ## What Can It Do?
 - **Complete Environment Capture**: Keep your entire Windows development context including:
@@ -88,75 +75,77 @@ This creates the executable and prepares all necessary files.
 ### Basic Commands
 Once everything is set up, you can manage your development contexts through simple voice commands:
 
-**Saving Contexts (Magic Commands):**
-- "Memorize realm as [project-name]"
-- "Memorize [project-name]"
-- "Snapshot" (quick save with timestamp)
+**Saving Contexts:**
+- "Save workspace as [project-name]"
+- "Keep context as [project-name]"
+- "Quick save" (auto-timestamped)
 
 **Restoring Contexts:**
-- "Recall [project-name]"
-- "Recall my pytorch project"
-- "Timeshift" (switch to most recent)
+- "Restore [project-name]"
+- "Switch to [project-name]"
+- "Quick switch" (to most recent)
 
 **Management Commands:**
-- "Grimoire" (list all saved contexts)
-- "Vanish" (save & close all windows)
-- "Shroud" (save & minimize all windows)
-
-> **Note**: We use magic-themed commands to avoid conflicts with G-Assist's gaming features. Words like "save", "keep", and "capture" may trigger instant replay recording.
+- "List contexts" or "Show workspaces"
+- "Clear windows" (save & close all)
+- "Minimize all" (save & minimize all)
+- "Clear history [project-name]" (delete saved context)
+- "Clear all history" (delete all contexts)
 
 ### Example Usage
 
-**Memorizing a Machine Learning Project:**
+**Saving a Machine Learning Project:**
 ```
-You: "Memorize realm as pytorch-research"
-G-Assist: "✨ Realm 'pytorch-research' has been MEMORIZED! ✨"
-📚 Windows preserved: 8
-🌐 Browser portals: 42
-📜 Sacred scrolls (IDE files): 15
-🔮 Terminal crystals: 5
-🗝️ Enchanted variables: 23
+You: "Save workspace as pytorch-research"
+G-Assist: "pytorch-research context KEPT!
+Windows: 8
+Browser tabs: 42
+IDE files: 15
+Terminal sessions: 5
+Environment variables: 23"
 ```
 
 **Restoring a Web Development Environment:**
 ```
-You: "Recall react-project"
-G-Assist: "✨ Realm 'react-project' has been SUMMONED! ✨"
-🪟 Windows conjured: 6
-🌐 Browser portals opened: 15
-🗝️ Enchanted variables: Restored
-📅 Originally cast at: 2025-07-18T10:30:00Z
+You: "Restore react-project"
+G-Assist: "react-project context RESTORED!
+Windows restored: 6
+Browser tabs restored: 15
+Environment variables: Restored
+Originally kept at: 2025-07-18T10:30:00Z"
 ```
 
 **Quick Save/Restore:**
 ```
-You: "Snapshot"
-G-Assist: "💎 Realm CRYSTALLIZED instantly!"
-✨ Preserved as: crystal-20250718-103045
-🪟 Windows: 12
-🌐 Browser portals: 35
-⚡ Use 'timeshift' to return instantly!
+You: "Quick save"
+G-Assist: "Quick save SUCCESSFUL!
+Saved as: auto-20250718-103045
+Windows: 12
+Browser tabs: 35
+Use 'Quick switch' to restore instantly!"
 
-You: "Timeshift"
-G-Assist: "🌀 Recent temporal anchors:"
-1. crystal-20250718-103045
+You: "Quick switch"
+G-Assist: "Recent contexts:
+1. auto-20250718-103045
 2. pytorch-research
 3. react-project
-⚡ Warping to: crystal-20250718-103045
+
+Switching to: auto-20250718-103045"
 ```
 
-**Viewing All Saved Realms:**
+**Managing Saved Contexts:**
 ```
-You: "Grimoire"
-G-Assist: "📖 The Grimoire reveals 5 memorized realms:"
-✨ pytorch-research:
-  📅 Cast on: 2025-07-18T09:15:00Z
-  🪟 Windows: 8, 🌐 Portals: 42
+You: "List contexts"
+G-Assist: "Found 5 saved contexts:
 
-✨ react-project:
-  📅 Cast on: 2025-07-17T14:22:00Z
-  🪟 Windows: 6, 🌐 Portals: 15
-...
+pytorch-research:
+  Saved: 2025-07-18T09:15:00Z
+  Windows: 8, Tabs: 42
+
+react-project:
+  Saved: 2025-07-17T14:22:00Z
+  Windows: 6, Tabs: 15
+..."
 ```
 
 ## Advanced Features
@@ -248,15 +237,95 @@ Some operations require elevated privileges:
 - Certain window management operations
 - Deep application state access
 
+## Project Structure
+
+The Context Keeper plugin is organized into modular components for maintainability and extensibility:
+
+```
+Keeper/
+├── plugin.py                      # Main plugin entry point and command handler
+├── windows_context_manager.py     # Windows API integration for window management
+├── browser_tab_extractor.py       # Browser tab extraction via debugging protocols
+├── browser_tab_extractor_fast.py  # Optimized browser tab extraction for quick saves
+├── environment_manager.py         # Environment variable capture and restoration
+├── terminal_manager.py            # Terminal state preservation (PowerShell, CMD, WSL)
+├── ide_tracker.py                 # IDE state tracking (VSCode, JetBrains, etc.)
+├── document_tracker.py            # Document state monitoring (Office, Notion, etc.)
+├── whitelist_manager.py           # Application whitelist for minimize/close operations
+├── quick_response.py              # Fast response handling for better UX
+├── manifest.json                  # G-Assist plugin manifest with command definitions
+├── requirements.txt               # Python dependencies
+├── build.bat                      # Windows build script for creating executable
+└── test/                          # Test suite and debugging tools
+```
+
+### Core Components
+
+#### `plugin.py`
+The main entry point that:
+- Implements the G-Assist plugin protocol with named pipe communication
+- Routes commands to appropriate handlers (memorize, restore, list, etc.)
+- Manages the response format with proper `<<END>>` termination
+- Coordinates all subsystem managers
+
+#### `windows_context_manager.py`
+Windows-specific functionality:
+- Enumerates all visible windows using Win32 API
+- Captures window positions, sizes, states, and Z-order (stacking)
+- Handles window restoration with proper layering
+- Supports minimize/close operations with whitelist protection
+
+#### `browser_tab_extractor.py` & `browser_tab_extractor_fast.py`
+Browser integration via debugging protocols:
+- Extracts tabs from Chrome, Edge, Firefox
+- Captures URLs, titles, and active tab state
+- Fast version skips favicon fetching for performance
+- Uses browser debugging ports for data access
+
+#### `environment_manager.py`
+Environment variable management:
+- Captures current environment state
+- Creates timestamped snapshots
+- Generates restoration scripts (.bat files)
+- Handles PATH and custom variables
+
+#### `terminal_manager.py`
+Terminal session preservation:
+- Detects Windows Terminal, PowerShell, CMD
+- Captures working directories per tab
+- Preserves shell types and configurations
+- Supports multiple terminal applications
+
+#### `ide_tracker.py`
+IDE state tracking:
+- Monitors VSCode, Cursor, JetBrains IDEs
+- Tracks open projects and files
+- Captures workspace configurations
+- Handles recent project history
+
+#### `document_tracker.py`
+Document application monitoring:
+- Tracks Office suite documents
+- Monitors note-taking apps (Notion, Obsidian)
+- Detects unsaved changes
+- Supports document restoration
+
+#### `whitelist_manager.py`
+Protection list management:
+- Maintains list of apps to keep visible
+- Default protection for NVIDIA apps and G-Assist
+- Persistent whitelist storage
+- Runtime add/remove capabilities
+
 ## Data Structure
 
 Contexts are saved as JSON files in:
 ```
-%USERPROFILE%\Keeper\contexts\[context-name]\
+%USERPROFILE%\.keeper\contexts\[context-name]\
 ```
 
 Each context includes:
-- Window positions and states
+- Window positions, states, and Z-order
 - Application configurations
 - Environment variable snapshots
 - Browser tab organizations
@@ -264,24 +333,22 @@ Each context includes:
 
 ## Voice Commands Reference
 
-### Magic Commands (Recommended)
+### Voice Commands
 | Command | Description | Example |
 |---------|-------------|---------|
-| `Memorize [name]` | Save current environment | "Memorize realm as pytorch-research" |
-| `Recall [name]` | Restore saved environment | "Recall my web project" |
-| `Snapshot` | Quick save with timestamp | "Snapshot" |
-| `Timeshift` | Switch to most recent | "Timeshift" |
-| `Grimoire` | List all saved realms | "Grimoire" |
-| `Vanish` | Save & close all windows | "Vanish" |
-| `Shroud` | Save & minimize all windows | "Shroud" |
-
-### Legacy Commands (May trigger G-Assist)
-| Command | Description | Note |
-|---------|-------------|------|
-| `Keep context as [name]` | Save environment | ⚠️ May trigger instant replay |
-| `Restore [name]` | Restore environment | ✅ Safe to use |
-| `Quick keep` | Auto-save | ⚠️ May trigger instant replay |
-| `Save workspace` | Save current setup | ⚠️ Will trigger instant replay |
+| `Save workspace as [name]` | Save current environment | "Save workspace as pytorch-research" |
+| `Keep context as [name]` | Save current environment | "Keep context as web-dev" |
+| `Restore [name]` | Restore saved environment | "Restore my web project" |
+| `Quick save` | Auto-timestamped save | "Quick save" |
+| `Quick switch` | Switch to most recent | "Quick switch" |
+| `List contexts` | Show all saved workspaces | "List contexts" |
+| `Clear windows` | Save & close all windows | "Clear windows" |
+| `Minimize all` | Save & minimize all windows | "Minimize all" |
+| `Clear history [name]` | Delete a saved context | "Clear history old-project" |
+| `Clear all history` | Delete all saved contexts | "Clear all history" |
+| `Add to whitelist [app]` | Protect app from minimize | "Add Chrome to whitelist" |
+| `Remove from whitelist [app]` | Unprotect app | "Remove notepad from whitelist" |
+| `List whitelist` | Show protected apps | "List whitelist" |
 
 ## Security and Privacy
 

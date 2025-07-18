@@ -53,7 +53,16 @@ INDEX_FILE = Path.home() / ".keeper" / "index.json"
 
 
 class ContextKeeper:
-    """Main context keeper implementation using all components"""
+    """Main context keeper implementation using all components.
+    
+    This class coordinates all subsystems to provide complete workspace management:
+    - Window enumeration and positioning
+    - Browser tab extraction
+    - Environment variable capture
+    - Terminal state preservation
+    - IDE and document tracking
+    - Whitelist management for protection
+    """
     
     def __init__(self):
         self.env_manager = EnvironmentManager()
@@ -69,7 +78,22 @@ class ContextKeeper:
         self._context_cache = None
         
     def keep_context(self, context_name: str, quick_mode: bool = False) -> Dict:
-        """Keep complete context as per DESIGN.md"""
+        """Save the complete workspace context.
+        
+        Args:
+            context_name: Name to save the context as
+            quick_mode: If True, skips time-consuming operations like:
+                       - Document state checking
+                       - Favicon fetching
+                       - Environment cleanup
+                       
+        Returns:
+            Dict containing all captured context data including:
+            - Windows and their positions
+            - Browser tabs
+            - Environment variables
+            - Application states
+        """
         import time
         start_time = time.time()
         
@@ -241,7 +265,20 @@ class ContextKeeper:
             self.logger.warning(f"Failed to capture clipboard: {e}")
     
     def _process_window(self, window: WindowInfo, context_data: Dict, quick_mode: bool = False):
-        """Process a window and add to appropriate category"""
+        """Process a window and categorize it by type.
+        
+        This method examines each window and routes it to the appropriate
+        handler based on the process name:
+        - Browsers (Chrome, Edge, Firefox)
+        - Terminals (Windows Terminal, PowerShell, CMD)
+        - IDEs (VSCode, Cursor, JetBrains)
+        - Other applications
+        
+        Args:
+            window: WindowInfo object containing window details
+            context_data: Dictionary to store the categorized window data
+            quick_mode: Whether to use fast extraction methods
+        """
         process_name = window.process_name.lower()
         self.logger.debug(f"Processing window: {window.title[:30]}... from process: {process_name}")
         
@@ -585,37 +622,44 @@ def quick_keep(params: dict = None, context: dict = None, system_info: dict = No
         browsers_count = len(context_data.get("browsers", []))
         total_tabs = sum(len(b.get("tabs", [])) for b in context_data.get("browsers", []))
         
-        message = f"Quick keep SUCCESSFUL!\n"
-        message += f"Saved as: {context_name}\n"
-        message += f"Windows: {windows_count}\n"
-        message += f"Browser tabs: {total_tabs}\n"
-        message += "Use 'Quick switch' to restore instantly!"
+        message = f"⚡ **Quick Save Complete!**\n\n"
+        message += f"📌 **Auto-saved as:** `{context_name}`\n\n"
+        message += f"📊 **Captured:**\n"
+        message += f"  🪟 {windows_count} windows\n"
+        message += f"  🌐 {total_tabs} browser tabs\n\n"
+        message += "💡 **Tip:** Say 'Quick switch' to instantly restore this workspace!"
         
         return generate_success_response(message)
         
     except Exception as e:
         logging.error(f"Quick keep failed: {e}\n{traceback.format_exc()}")
-        return generate_failure_response(f"Quick keep failed: {str(e)}")
+        return generate_failure_response(f"❌ Quick save failed: {str(e)}")
 
 
 def quick_switch(params: dict = None, context: dict = None, system_info: dict = None) -> dict:
     if not INDEX_FILE.exists():
-        return generate_failure_response("No recent contexts available.")
+        return generate_failure_response("📭 No recent workspaces available. Save one with 'Quick save' first!")
     
     try:
         index = json.loads(INDEX_FILE.read_text(encoding="utf-8"))
     except:
-        return generate_failure_response("Index file corrupted.")
+        return generate_failure_response("⚠️ Index file corrupted.")
 
     if not index:
-        return generate_failure_response("Context list is empty.")
+        return generate_failure_response("📭 No recent workspaces found.")
     
     # Show recent contexts list
-    message = "Recent contexts:\n"
+    message = "🕒 **Recent Workspaces**\n\n"
     for i, ctx in enumerate(index[:5], 1):
-        message += f"{i}. {ctx}\n"
+        if i == 1:
+            message += f"**{i}. {ctx}** ← _switching to this_\n"
+        else:
+            message += f"{i}. {ctx}\n"
     
-    message += f"\nSwitching to: {index[0]}\n"
+    if len(index) > 5:
+        message += f"_...and {len(index) - 5} more_\n"
+    
+    message += "\n⏳ Restoring workspace...\n"
     
     # Restore most recent context
     context_name = index[0]
@@ -628,11 +672,11 @@ def list_contexts(params: dict = None, context: dict = None, system_info: dict =
         contexts = context_keeper.list_contexts()
         
         if not contexts:
-            return generate_success_response("No saved contexts found.")
+            return generate_success_response("📭 No saved workspaces found. Start saving with 'Save workspace as [name]'!")
         
-        message = f"Found {len(contexts)} saved contexts:\n\n"
+        message = f"📚 **Your Saved Workspaces ({len(contexts)} total)**\n\n"
         
-        for ctx_name in contexts[:20]:  # Show max 20
+        for i, ctx_name in enumerate(contexts[:10], 1):  # Show max 10
             try:
                 context_path = DATA_DIR / ctx_name / "context.json"
                 with open(context_path, "r", encoding="utf-8") as f:
@@ -644,24 +688,50 @@ def list_contexts(params: dict = None, context: dict = None, system_info: dict =
                 total_tabs = sum(len(b.get("tabs", [])) for b in ctx_data.get("browsers", []))
                 timestamp = ctx_data.get("timestamp", "Unknown")
                 
-                message += f"{ctx_name}:\n"
-                message += f"  Saved: {timestamp}\n"
-                message += f"  Windows: {windows_count}, Tabs: {total_tabs}\n\n"
+                # Format timestamp nicely
+                try:
+                    dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                    time_str = dt.strftime("%b %d at %I:%M %p")
+                except:
+                    time_str = timestamp
+                
+                message += f"**{i}. {ctx_name}**\n"
+                message += f"   📅 Saved: {time_str}\n"
+                message += f"   📊 {windows_count} windows, {total_tabs} tabs\n\n"
                 
             except Exception as e:
-                message += f"{ctx_name}: (Error reading)\n\n"
+                message += f"**{i}. {ctx_name}** ⚠️ (Error reading)\n\n"
         
-        if len(contexts) > 20:
-            message += f"...and {len(contexts) - 20} more contexts"
+        if len(contexts) > 10:
+            message += f"\n_...and {len(contexts) - 10} more workspaces_\n\n"
+        
+        message += "💡 **Tip:** Say 'Restore [workspace-name]' to switch to any saved workspace!"
         
         return generate_success_response(message.rstrip())
         
     except Exception as e:
         logging.error(f"List contexts failed: {e}\n{traceback.format_exc()}")
-        return generate_failure_response(f"Failed to list contexts: {str(e)}")
+        return generate_failure_response(f"❌ Failed to list workspaces: {str(e)}")
 
 
 def clear_windows(params: dict = None, context: dict = None, system_info: dict = None) -> dict:
+    """Save context and close all windows (with optional aggressive mode).
+    
+    This function provides a clean desktop by closing all applications
+    while preserving the current state for later restoration.
+    
+    Modes:
+    - Normal: Checks for unsaved documents, closes gracefully
+    - Aggressive: Force terminates processes, skips safety checks
+    
+    Both modes respect the whitelist (NVIDIA apps, G-Assist, etc.)
+    
+    Args:
+        params: Dict with optional 'aggressive' boolean flag
+        
+    Returns:
+        Success response with closure statistics
+    """
     temp_name = "autokeep-" + datetime.now().strftime("%Y%m%d-%H%M%S")
     aggressive = params.get("aggressive", False) if params else False
     
@@ -683,21 +753,42 @@ def clear_windows(params: dict = None, context: dict = None, system_info: dict =
             whitelist_checker=context_keeper.whitelist_manager.is_whitelisted
         )
         
-        message = f"Context kept as '{temp_name}'.\n"
+        message = f"🧽 **Desktop Cleared!**\n\n"
+        message += f"💾 **Auto-saved as:** `{temp_name}`\n\n"
+        
         if aggressive:
-            message += "AGGRESSIVE MODE: Force closing applications.\n"
-        message += f"Closed: {counts['closed']} windows\n"
-        message += f"Failed: {counts['failed']}\n"
-        message += f"Protected (whitelisted): {counts.get('whitelisted', 0)}\n"
-        message += f"System processes: {counts['excluded']}"
+            message += "⚠️ **Mode:** Aggressive (force-closed)\n\n"
+        
+        message += f"📊 **Results:**\n"
+        message += f"  ✅ Closed: {counts['closed']} windows\n"
+        if counts['failed'] > 0:
+            message += f"  ❌ Failed: {counts['failed']}\n"
+        if counts.get('whitelisted', 0) > 0:
+            message += f"  🔒 Protected: {counts.get('whitelisted', 0)} (whitelisted)\n"
+        message += f"  🔧 System: {counts['excluded']} processes kept\n\n"
+        
+        message += "💡 **Tip:** Use 'Quick switch' to restore your desktop instantly!"
         
         return generate_success_response(message)
     except Exception as e:
-        return generate_failure_response(f"Clear windows failed: {str(e)}")
+        return generate_failure_response(f"❌ Clear windows failed: {str(e)}")
 
 
 def minimize_windows(params: dict = None, context: dict = None, system_info: dict = None) -> dict:
-    """Safer alternative that just minimizes windows instead of closing them"""
+    """Save context and minimize all windows (safer than closing).
+    
+    This function provides a clean desktop without closing applications.
+    It respects the whitelist, keeping specified apps visible.
+    
+    Whitelisted apps (always visible):
+    - NVIDIA App
+    - Project G-Assist
+    - System processes
+    - User-defined apps
+    
+    Returns:
+        Success response with minimize statistics
+    """
     temp_name = "autokeep-" + datetime.now().strftime("%Y%m%d-%H%M%S")
     try:
         context_keeper.keep_context(temp_name)
@@ -708,18 +799,43 @@ def minimize_windows(params: dict = None, context: dict = None, system_info: dic
             whitelist_checker=context_keeper.whitelist_manager.is_whitelisted
         )
         
-        message = f"Context kept as '{temp_name}'\n"
-        message += f"Windows minimized: {counts['minimized']}\n"
+        message = f"🖼️ **Desktop Minimized!**\n\n"
+        message += f"💾 **Auto-saved as:** `{temp_name}`\n\n"
+        message += f"📊 **Results:**\n"
+        message += f"  📥 Minimized: {counts['minimized']} windows\n"
         if counts['skipped'] > 0:
-            message += f"Windows kept visible (whitelisted): {counts['skipped']}"
+            message += f"  👀 Kept visible: {counts['skipped']} (whitelisted)\n\n"
+        else:
+            message += "\n"
+        
+        message += "💡 **Tip:** Your apps are still running! Say 'Quick switch' to restore the layout."
         
         return generate_success_response(message)
     except Exception as e:
-        return generate_failure_response(f"Minimize windows failed: {str(e)}")
+        return generate_failure_response(f"❌ Minimize windows failed: {str(e)}")
 
 
 def memorize(params: dict = None, context: dict = None, system_info: dict = None) -> dict:
-    """Magic spell to memorize current realm (workspace)"""
+    """Save the current workspace context.
+    
+    This is the main entry point for saving workspaces. It supports multiple
+    parameter names for flexibility:
+    - 'realm' or 'project': Primary parameter names
+    - 'realm_name' or 'context_name': Legacy compatibility
+    
+    The function uses threading for quick response times:
+    1. In quick mode (default), it responds within 0.3s
+    2. If save completes quickly, returns full statistics
+    3. If still saving, returns "saving..." message
+    
+    Args:
+        params: Dict containing context name and options
+        context: G-Assist conversation context (unused)
+        system_info: System information from G-Assist (unused)
+        
+    Returns:
+        Success response with save statistics or progress message
+    """
     if not params:
         return generate_failure_response("Parameters required.")
     
@@ -748,7 +864,7 @@ def memorize(params: dict = None, context: dict = None, system_info: dict = None
             
             if thread.is_alive():
                 # Return immediate response while save continues
-                return generate_success_response(f"Saving {context_name} workspace...")
+                return generate_success_response(f"💾 Saving **{context_name}** workspace...")
             else:
                 # Completed quickly, return full details
                 context_data = save_result.get('data', {})
@@ -781,21 +897,29 @@ def memorize(params: dict = None, context: dict = None, system_info: dict = None
         # Count environment variables
         env_vars_count = len(context_data.get("environmentVariables", {}))
         
-        # Build detailed response message
-        message = f"{context_name} context KEPT!\n"
-        message += f"Windows: {windows_count}\n"
-        message += f"Browser tabs: {total_tabs}\n"
+        # Build beautiful response message with emojis and formatting
+        message = f"✅ **{context_name}** workspace saved successfully!\n\n"
+        message += f"📊 **Captured Items:**\n"
+        message += f"  🪟 Windows: **{windows_count}** applications\n"
+        message += f"  🌐 Browser tabs: **{total_tabs}** tabs"
+        if browsers_count > 1:
+            message += f" ({browsers_count} browsers)"
+        message += "\n"
+        
         if total_files > 0:
-            message += f"IDE files: {total_files}\n"
+            message += f"  💻 IDE files: **{total_files}** open files\n"
         if terminal_tabs > 0:
-            message += f"Terminal sessions: {terminal_tabs}\n"
-        message += f"Environment variables: {env_vars_count}"
+            message += f"  🖥️ Terminal sessions: **{terminal_tabs}** active terminals\n"
+        if env_vars_count > 0:
+            message += f"  🔧 Environment: **{env_vars_count}** variables captured\n"
+        
+        message += f"\n💡 **Tip:** Use 'Restore {context_name}' to bring back this exact setup!"
         
         return generate_success_response(message)
         
     except Exception as e:
         logging.error(f"Keep context failed: {e}\n{traceback.format_exc()}")
-        return generate_failure_response(f"Failed to keep context '{context_name}': {str(e)}")
+        return generate_failure_response(f"❌ Failed to save workspace '{context_name}': {str(e)}")
 
 
 def add_to_whitelist(params: dict = None, context: dict = None, system_info: dict = None) -> dict:
@@ -810,12 +934,15 @@ def add_to_whitelist(params: dict = None, context: dict = None, system_info: dic
     try:
         added = context_keeper.whitelist_manager.add_to_whitelist(app_name)
         if added:
-            return generate_success_response(f"Added '{app_name}' to whitelist.")
+            message = f"✅ **Added to Whitelist**\n\n"
+            message += f"📌 **Application:** {app_name}\n\n"
+            message += "ℹ️ This app will stay visible when you minimize or clear windows."
+            return generate_success_response(message)
         else:
-            return generate_success_response(f"'{app_name}' is already in whitelist.")
+            return generate_success_response(f"ℹ️ '{app_name}' is already in the whitelist.")
     except Exception as e:
         logging.error(f"Add to whitelist failed: {e}")
-        return generate_failure_response(f"Failed to add to whitelist: {str(e)}")
+        return generate_failure_response(f"❌ Failed to add to whitelist: {str(e)}")
 
 
 def remove_from_whitelist(params: dict = None, context: dict = None, system_info: dict = None) -> dict:
@@ -830,12 +957,15 @@ def remove_from_whitelist(params: dict = None, context: dict = None, system_info
     try:
         removed = context_keeper.whitelist_manager.remove_from_whitelist(app_name)
         if removed:
-            return generate_success_response(f"Removed '{app_name}' from whitelist.")
+            message = f"🗑️ **Removed from Whitelist**\n\n"
+            message += f"📌 **Application:** {app_name}\n\n"
+            message += "ℹ️ This app will now be minimized with other windows."
+            return generate_success_response(message)
         else:
-            return generate_success_response(f"'{app_name}' was not in whitelist or is protected.")
+            return generate_success_response(f"⚠️ '{app_name}' was not in whitelist or is a protected system app.")
     except Exception as e:
         logging.error(f"Remove from whitelist failed: {e}")
-        return generate_failure_response(f"Failed to remove from whitelist: {str(e)}")
+        return generate_failure_response(f"❌ Failed to remove from whitelist: {str(e)}")
 
 
 def list_whitelist(params: dict = None, context: dict = None, system_info: dict = None) -> dict:
@@ -844,20 +974,43 @@ def list_whitelist(params: dict = None, context: dict = None, system_info: dict 
         whitelist = context_keeper.whitelist_manager.list_whitelist()
         
         if not whitelist:
-            return generate_success_response("Whitelist is empty.")
+            return generate_success_response("📭 The whitelist is empty. Add apps with 'Add [app-name] to whitelist'.")
         
-        message = "Minimize whitelist:\n"
+        message = f"🔒 **Protected Applications ({len(whitelist)} total)**\n\n"
+        message += "These apps stay visible when minimizing windows:\n\n"
+        
+        # Separate system apps from user apps
+        system_apps = []
+        user_apps = []
+        
         for app in whitelist:
-            message += f"  • {app}\n"
+            if app.lower() in ['explorer.exe', 'dwm.exe', 'shellexperiencehost.exe', 'searchhost.exe', 'textinputhost.exe']:
+                system_apps.append(app)
+            else:
+                user_apps.append(app)
+        
+        if user_apps:
+            message += "📌 **User Apps:**\n"
+            for app in user_apps:
+                message += f"  • {app}\n"
+            message += "\n"
+        
+        if system_apps:
+            message += "🔧 **System Apps:**\n"
+            for app in system_apps:
+                message += f"  • {app}\n"
+            message += "\n"
+        
+        message += "💡 **Tip:** Remove apps with 'Remove [app-name] from whitelist'."
         
         return generate_success_response(message.rstrip())
     except Exception as e:
         logging.error(f"List whitelist failed: {e}")
-        return generate_failure_response(f"Failed to list whitelist: {str(e)}")
+        return generate_failure_response(f"❌ Failed to list whitelist: {str(e)}")
 
 
 def clear_history(params: dict = None, context: dict = None, system_info: dict = None) -> dict:
-    """Clear/delete a specific saved context"""
+    """Clear/delete a specific saved context - only deletes saved data, does not close windows"""
     if not params:
         return generate_failure_response("Parameters required.")
     
@@ -872,7 +1025,15 @@ def clear_history(params: dict = None, context: dict = None, system_info: dict =
         
         # Check if context exists
         if not context_path.exists():
-            return generate_failure_response(f"Context '{context_name}' not found.")
+            return generate_failure_response(f"❌ Workspace '{context_name}' not found.")
+        
+        # Get info about the context before deleting
+        try:
+            with open(context_path / "context.json", "r", encoding="utf-8") as f:
+                ctx_data = json.load(f)
+            timestamp = ctx_data.get('timestamp', 'Unknown')
+        except:
+            timestamp = 'Unknown'
         
         # Remove the context directory and all its contents
         import shutil
@@ -889,30 +1050,38 @@ def clear_history(params: dict = None, context: dict = None, system_info: dict =
                 pass
         
         logging.info(f"Cleared context history for '{context_name}'")
-        return generate_success_response(f"Context '{context_name}' has been deleted.")
+        
+        message = f"🗑️ **Workspace Deleted**\n\n"
+        message += f"📌 **Name:** {context_name}\n"
+        message += f"📅 **Was saved:** {timestamp}\n\n"
+        message += "ℹ️ This only deleted the saved workspace data. Your current windows remain open."
+        
+        return generate_success_response(message)
         
     except Exception as e:
         logging.error(f"Clear history failed: {e}\n{traceback.format_exc()}")
-        return generate_failure_response(f"Failed to clear history for '{context_name}': {str(e)}")
+        return generate_failure_response(f"❌ Failed to delete workspace '{context_name}': {str(e)}")
 
 
 def clear_all_history(params: dict = None, context: dict = None, system_info: dict = None) -> dict:
-    """Clear all saved contexts - use with caution!"""
+    """Clear all saved contexts - only deletes saved data, does not close windows"""
     try:
         # Count contexts before deletion
         contexts = context_keeper.list_contexts()
         count = len(contexts)
         
         if count == 0:
-            return generate_success_response("No saved contexts to clear.")
+            return generate_success_response("📭 No saved workspaces to delete.")
         
         # Remove all context directories
         import shutil
+        deleted_count = 0
         if DATA_DIR.exists():
             for context_dir in DATA_DIR.iterdir():
                 if context_dir.is_dir():
                     try:
                         shutil.rmtree(context_dir)
+                        deleted_count += 1
                     except Exception as e:
                         logging.error(f"Failed to remove {context_dir}: {e}")
         
@@ -920,12 +1089,18 @@ def clear_all_history(params: dict = None, context: dict = None, system_info: di
         if INDEX_FILE.exists():
             INDEX_FILE.write_text(json.dumps([], indent=2))
         
-        logging.info(f"Cleared all {count} contexts")
-        return generate_success_response(f"Cleared all {count} saved contexts.")
+        logging.info(f"Cleared all {deleted_count} contexts")
+        
+        message = f"🧽 **All Workspaces Cleared**\n\n"
+        message += f"🗑️ **Deleted:** {deleted_count} saved workspaces\n\n"
+        message += "ℹ️ This only deleted the saved workspace data. Your current windows remain open.\n\n"
+        message += "💡 **Tip:** Start fresh by saving a new workspace with 'Save workspace as [name]'!"
+        
+        return generate_success_response(message)
         
     except Exception as e:
         logging.error(f"Clear all history failed: {e}\n{traceback.format_exc()}")
-        return generate_failure_response(f"Failed to clear all history: {str(e)}")
+        return generate_failure_response(f"❌ Failed to clear all workspaces: {str(e)}")
 
 
 def restore_context(params: dict = None, context: dict = None, system_info: dict = None) -> dict:
@@ -939,7 +1114,7 @@ def restore_context(params: dict = None, context: dict = None, system_info: dict
         # Check if context exists
         context_path = DATA_DIR / context_name / "context.json"
         if not context_path.exists():
-            return generate_failure_response(f"Context '{context_name}' not found.")
+            return generate_failure_response(f"❌ Workspace '{context_name}' not found.")
         
         # Load context data to show what will be restored
         with open(context_path, "r", encoding="utf-8") as f:
@@ -949,26 +1124,37 @@ def restore_context(params: dict = None, context: dict = None, system_info: dict
         windows_count = len(context_data.get("windows", {}).get("applications", []))
         browsers_count = len(context_data.get("browsers", []))
         total_tabs = sum(len(b.get("tabs", [])) for b in context_data.get("browsers", []))
+        timestamp = context_data.get('timestamp', 'Unknown')
         
         # Perform the restoration
         success = context_keeper.restore_context(context_name)
         
         if success:
-            message = f"{context_name} context RESTORED!\n"
-            message += f"Windows restored: {windows_count}\n"
-            message += f"Browser tabs restored: {total_tabs}\n"
-            message += "Environment variables: Restored\n"
-            message += f"Originally kept at: {context_data.get('timestamp', 'Unknown')}"
+            message = f"🔄 **{context_name}** workspace restored!\n\n"
+            message += f"✨ **Restored Items:**\n"
+            message += f"  🪟 {windows_count} windows positioned\n"
+            message += f"  🌐 {total_tabs} browser tabs opened\n"
+            message += f"  🔧 Environment variables applied\n\n"
+            message += f"⏰ **Originally saved:** {timestamp}\n\n"
+            message += "💡 Your workspace is back exactly as you left it!"
             return generate_success_response(message)
         else:
-            return generate_failure_response(f"Failed to restore context '{context_name}'.")
+            return generate_failure_response(f"❌ Failed to restore workspace '{context_name}'.")
             
     except Exception as e:
         logging.error(f"Restore context failed: {e}\n{traceback.format_exc()}")
-        return generate_failure_response(f"Failed to restore context '{context_name}': {str(e)}")
+        return generate_failure_response(f"❌ Failed to restore workspace '{context_name}': {str(e)}")
 
 
 def read_command() -> dict | None:
+    """Read a command from G-Assist via stdin pipe.
+    
+    G-Assist sends commands as JSON through a named pipe.
+    This function reads chunks until the complete message is received.
+    
+    Returns:
+        Parsed JSON command or None if read fails
+    """
     try:
         STD_INPUT_HANDLE = -10
         pipe = windll.kernel32.GetStdHandle(STD_INPUT_HANDLE)
@@ -994,9 +1180,18 @@ def read_command() -> dict | None:
 
 
 def write_response(response: Response) -> None:
+    """Write a response back to G-Assist via stdout pipe.
+    
+    IMPORTANT: The response must end with <<END>> marker
+    or G-Assist will timeout waiting for more data.
+    
+    Args:
+        response: Dict with 'success' and 'message' keys
+    """
     try:
         STD_OUTPUT_HANDLE = -11
         pipe = windll.kernel32.GetStdHandle(STD_OUTPUT_HANDLE)
+        # Critical: Add <<END>> terminator
         json_message = json.dumps(response) + "<<END>>"
         message_bytes = json_message.encode("utf-8")
         message_len = len(message_bytes)
@@ -1033,6 +1228,20 @@ def execute_shutdown_command():
 
 
 def main():
+    """Main plugin loop implementing G-Assist communication protocol.
+    
+    This function:
+    1. Reads commands from stdin (named pipe from G-Assist)
+    2. Parses JSON command structure
+    3. Routes to appropriate handler function
+    4. Sends JSON response with <<END>> terminator
+    5. Continues until shutdown command received
+    
+    Protocol format:
+    Input: {"tool_calls": [{"func": "command_name", "params": {...}}]}
+    Output: {"success": true/false, "message": "..."}
+    """
+    # G-Assist protocol constants
     TOOL_CALLS_PROPERTY = 'tool_calls'
     CONTEXT_PROPERTY = 'messages'
     SYSTEM_INFO_PROPERTY = 'system_info'

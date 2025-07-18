@@ -14,7 +14,21 @@ from urllib.parse import urlparse
 
 
 class BrowserTabExtractor:
-    """Extract browser tabs using various methods without requiring extensions"""
+    """Extract browser tabs using browser debugging protocols.
+    
+    This class provides cross-browser tab extraction without requiring
+    browser extensions. It uses:
+    - Chrome/Edge: Chrome DevTools Protocol via debugging port
+    - Firefox: Session store files (recovery.jsonlz4)
+    
+    Features:
+    - Tab URLs and titles
+    - Active tab tracking
+    - Favicon extraction (base64)
+    - Tab group detection (limited)
+    
+    Note: Browsers must be running with debugging enabled for full access.
+    """
     
     def __init__(self):
         self.logger = logging.getLogger(__name__)
@@ -48,7 +62,20 @@ class BrowserTabExtractor:
         return self._extract_chromium_tabs('msedge')
     
     def _extract_chromium_tabs(self, browser_name: str) -> List[Dict]:
-        """Extract tabs from Chromium-based browsers"""
+        """Extract tabs from Chromium-based browsers (Chrome, Edge).
+        
+        Process:
+        1. Find the browser's debugging port (usually 9222-9225)
+        2. Query /json endpoint for all tabs
+        3. Filter for actual page tabs (not extensions/devtools)
+        4. Extract URL, title, favicon, and active state
+        
+        Args:
+            browser_name: 'chrome' or 'msedge'
+            
+        Returns:
+            List of tab dictionaries or dict with 'tabs' and 'activeIndex'
+        """
         try:
             # Find Chrome/Edge debugging port
             debug_port = self._find_chromium_debug_port(browser_name)
@@ -95,7 +122,19 @@ class BrowserTabExtractor:
             return []
     
     def _find_chromium_debug_port(self, browser_name: str) -> Optional[int]:
-        """Find the debugging port for Chrome/Edge"""
+        """Find the debugging port for Chrome/Edge.
+        
+        Strategy:
+        1. Check common ports (9222-9225) for active debug interface
+        2. Scan process command lines for --remote-debugging-port
+        3. Verify port responds to /json/version endpoint
+        
+        Most browsers don't enable debugging by default. Users may need
+        to launch with: --remote-debugging-port=9222
+        
+        Returns:
+            Port number if found, None otherwise
+        """
         # Common debugging ports
         common_ports = [9222, 9223, 9224, 9225]
         

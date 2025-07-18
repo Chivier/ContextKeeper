@@ -6,11 +6,26 @@ from typing import List, Set
 
 
 class WhitelistManager:
-    """Manages the whitelist of applications that should not be minimized"""
+    """Manages the whitelist of applications that should not be minimized.
+    
+    The whitelist protects important applications from being minimized
+    or closed during 'clear desktop' operations. This includes:
+    - NVIDIA applications (G-Assist, GeForce Experience)
+    - System processes (explorer, dwm)
+    - User-defined applications
+    
+    Whitelist is persistent across sessions and stored in:
+    ~/.keeper/whitelist.json
+    
+    Applications can be matched by:
+    - Process name (e.g., 'NVIDIA App.exe')
+    - Window title pattern (e.g., 'Project G-Assist')
+    """
     
     def __init__(self):
         self.logger = logging.getLogger(__name__)
         self.whitelist_file = Path.home() / ".keeper" / "whitelist.json"
+        # Default apps that should always stay visible
         self.default_whitelist = [
             "NVIDIA App.exe",
             "nvidia app.exe",  # Case variations
@@ -92,7 +107,19 @@ class WhitelistManager:
             return False
     
     def is_whitelisted(self, process_name: str, window_title: str = "") -> bool:
-        """Check if a process or window is whitelisted"""
+        """Check if a process or window is whitelisted.
+        
+        Matching is case-insensitive and supports two modes:
+        1. Process name match: Exact match for .exe files
+        2. Title pattern match: Substring match for window titles
+        
+        Args:
+            process_name: Name of the process (e.g., 'NVIDIA App.exe')
+            window_title: Window title for pattern matching
+            
+        Returns:
+            True if the window should be protected from minimize/close
+        """
         whitelist = self.get_whitelist()
         
         # Check process name (case insensitive)
