@@ -37,6 +37,7 @@ except ImportError:
 from terminal_manager import TerminalManager
 from ide_tracker import IDETracker
 from document_tracker import DocumentTracker
+from whitelist_manager import WhitelistManager
 
 type Response = dict[bool, Optional[str]]
 DATA_DIR = Path.home() / ".keeper" / "contexts"
@@ -62,6 +63,7 @@ class ContextKeeper:
         self.terminal_manager = TerminalManager()
         self.ide_tracker = IDETracker()
         self.document_tracker = DocumentTracker()
+        self.whitelist_manager = WhitelistManager()
         self.logger = logging.getLogger(__name__)
         self._last_context_time = 0
         self._context_cache = None
@@ -657,10 +659,17 @@ def minimize_windows(params: dict = None, context: dict = None, system_info: dic
         context_keeper.keep_context(temp_name)
         log_context(temp_name)
         
-        # Minimize all windows
-        count = context_keeper.windows_manager.minimize_all_windows()
+        # Minimize all windows except whitelisted ones
+        counts = context_keeper.windows_manager.minimize_all_windows(
+            whitelist_checker=context_keeper.whitelist_manager.is_whitelisted
+        )
         
-        return generate_success_response(f"Context kept as '{temp_name}' and {count} windows minimized.")
+        message = f"Context kept as '{temp_name}'\n"
+        message += f"Windows minimized: {counts['minimized']}\n"
+        if counts['skipped'] > 0:
+            message += f"Windows kept visible (whitelisted): {counts['skipped']}"
+        
+        return generate_success_response(message)
     except Exception as e:
         return generate_failure_response(f"Minimize windows failed: {str(e)}")
 

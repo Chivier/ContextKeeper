@@ -223,20 +223,33 @@ class WindowsContextManager:
             self.logger.error(f"Error restoring window position: {e}")
             return False
     
-    def minimize_all_windows(self) -> int:
-        """Minimize all visible windows"""
-        count = 0
+    def minimize_all_windows(self, whitelist_checker=None) -> Dict[str, int]:
+        """Minimize all visible windows except whitelisted ones
+        
+        Args:
+            whitelist_checker: Optional function that takes (process_name, window_title) and returns bool
+            
+        Returns:
+            Dict with counts: {'minimized': n, 'skipped': n}
+        """
+        counts = {'minimized': 0, 'skipped': 0}
         windows = self.enum_windows()
         
         for window in windows:
             if window.is_visible and not window.is_minimized:
+                # Check whitelist if checker provided
+                if whitelist_checker and whitelist_checker(window.process_name, window.title):
+                    self.logger.info(f"Skipping whitelisted window: {window.title} [{window.process_name}]")
+                    counts['skipped'] += 1
+                    continue
+                    
                 try:
                     self.user32.ShowWindow(window.hwnd, 6)  # SW_MINIMIZE
-                    count += 1
+                    counts['minimized'] += 1
                 except:
                     pass
                     
-        return count
+        return counts
     
     def get_foreground_window(self) -> Optional[WindowInfo]:
         """Get information about the currently active window"""
