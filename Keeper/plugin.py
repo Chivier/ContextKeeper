@@ -742,7 +742,7 @@ def list_contexts(params: dict = None, context: dict = None, system_info: dict =
         return generate_failure_response(f"❌ Failed to list workspaces: {str(e)}")
 
 
-def clear_windows(params: dict = None, context: dict = None, system_info: dict = None) -> dict:
+def close_windows(params: dict = None, context: dict = None, system_info: dict = None) -> dict:
     """Save context and close all windows (with optional aggressive mode).
     
     This function provides a clean desktop by closing all applications
@@ -799,7 +799,7 @@ def clear_windows(params: dict = None, context: dict = None, system_info: dict =
         save_thread.join(timeout=0.2)
         
         # Build response message
-        message = f"🧽 **Desktop Cleared!**\n\n"
+        message = f"🚪 **Applications Closed!**\n\n"
         
         if save_thread.is_alive():
             # Still saving, show minimal info
@@ -809,23 +809,24 @@ def clear_windows(params: dict = None, context: dict = None, system_info: dict =
             message += f"💾 **Auto-saved as:** `{temp_name}`\n\n"
         
         if aggressive:
-            message += "⚠️ **Mode:** Aggressive (force-closed)\n\n"
+            message += "⚠️ **Mode:** Aggressive (force-terminated)\n\n"
         elif unsaved_count > 0:
             message += f"⚠️ **Warning:** {unsaved_count} unsaved documents\n\n"
         
         message += f"📊 **Results:**\n"
-        message += f"  ✅ Closed: {counts['closed']} windows\n"
+        message += f"  ✅ Closed: {counts['closed']} applications\n"
         if counts['failed'] > 0:
             message += f"  ❌ Failed: {counts['failed']}\n"
         if counts.get('whitelisted', 0) > 0:
             message += f"  🔒 Protected: {counts.get('whitelisted', 0)} (whitelisted)\n"
         message += f"  🔧 System: {counts['excluded']} processes kept\n\n"
         
-        message += "💡 **Tip:** Use 'Quick switch' to restore your desktop instantly!"
+        message += "⚠️ **Note:** This command closes applications! Use 'Minimize windows' to hide them instead.\n"
+        message += "💡 **Tip:** Use 'Quick switch' to restore your closed applications!"
         
         return generate_success_response(message)
     except Exception as e:
-        return generate_failure_response(f"❌ Clear windows failed: {str(e)}")
+        return generate_failure_response(f"❌ Close windows failed: {str(e)}")
 
 
 def minimize_windows(params: dict = None, context: dict = None, system_info: dict = None) -> dict:
@@ -1336,7 +1337,7 @@ def main():
         'list_contexts': list_contexts,
         'quick_keep': quick_keep,
         'quick_switch': quick_switch,
-        'clear_windows': clear_windows,
+        'close_windows': close_windows,
         'minimize_windows': minimize_windows,
         'memorize': memorize,  # Add direct memorize command
         'add_to_whitelist': add_to_whitelist,

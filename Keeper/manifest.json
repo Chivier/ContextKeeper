@@ -15,6 +15,21 @@
       }
     },
     {
+      "name": "memorize",
+      "description": "Memorize/save the current workspace with the given name (alias for keep_context)",
+      "tags": ["memorize", "save", "workspace", "realm", "project", "remember", "keep"],
+      "properties": {
+        "realm": {
+          "type": "string",
+          "description": "The name to memorize this workspace as (realm/project name)"
+        },
+        "project": {
+          "type": "string",
+          "description": "Alternative parameter name for realm"
+        }
+      }
+    },
+    {
       "name": "restore_context",
       "description": "Restores a previously saved workspace with all windows, tabs and settings",
       "tags": ["restore", "workspace", "context", "switch", "open", "load", "resume"],
@@ -41,9 +56,9 @@
       "tags": ["switch", "quick", "back", "previous", "last", "recent", "toggle"]
     },
     {
-      "name": "clear_windows",
+      "name": "close_windows",
       "description": "Saves the current workspace then closes all windows for a clean desktop",
-      "tags": ["clear", "close", "clean", "windows", "everything", "all", "fresh", "quit", "aggressive"],
+      "tags": ["close", "quit", "clean", "windows", "everything", "all", "exit", "terminate", "aggressive"],
       "properties": {
         "aggressive": {
           "type": "boolean",
@@ -86,11 +101,19 @@
     {
       "name": "clear_history",
       "description": "Delete a specific saved workspace/context permanently",
-      "tags": ["clear", "delete", "remove", "history", "workspace", "context", "clean"],
+      "tags": ["clear", "delete", "remove", "history", "workspace", "context", "clean", "realm", "project"],
       "properties": {
         "context_name": {
           "type": "string",
           "description": "The name of the context to delete"
+        },
+        "realm": {
+          "type": "string",
+          "description": "Alternative name for context_name (realm/project to delete)"
+        },
+        "project": {
+          "type": "string",
+          "description": "Alternative name for context_name (project to delete)"
         }
       }
     },

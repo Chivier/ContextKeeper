@@ -78,6 +78,7 @@ Once everything is set up, you can manage your development contexts through simp
 **Saving Contexts:**
 - "Save workspace as [project-name]"
 - "Keep context as [project-name]"
+- "Memorize realm as [project-name]" (alternative syntax)
 - "Quick save" (auto-timestamped)
 
 **Restoring Contexts:**
@@ -87,10 +88,10 @@ Once everything is set up, you can manage your development contexts through simp
 
 **Management Commands:**
 - "List contexts" or "Show workspaces"
-- "Clear windows" (save & close all)
-- "Minimize all" (save & minimize all)
-- "Clear history [project-name]" (delete saved context)
-- "Clear all history" (delete all contexts)
+- "Close windows" (save & close all applications)
+- "Minimize all" (save & minimize all windows)
+- "Clear history [project-name]" (delete saved context files)
+- "Clear all history" (delete all saved context files)
 
 ### Example Usage
 
@@ -338,14 +339,15 @@ Each context includes:
 |---------|-------------|---------|
 | `Save workspace as [name]` | Save current environment | "Save workspace as pytorch-research" |
 | `Keep context as [name]` | Save current environment | "Keep context as web-dev" |
+| `Memorize realm as [name]` | Save current environment | "Memorize realm as project-x" |
 | `Restore [name]` | Restore saved environment | "Restore my web project" |
 | `Quick save` | Auto-timestamped save | "Quick save" |
 | `Quick switch` | Switch to most recent | "Quick switch" |
 | `List contexts` | Show all saved workspaces | "List contexts" |
-| `Clear windows` | Save & close all windows | "Clear windows" |
+| `Close windows` | Save & close all applications | "Close windows" |
 | `Minimize all` | Save & minimize all windows | "Minimize all" |
-| `Clear history [name]` | Delete a saved context | "Clear history old-project" |
-| `Clear all history` | Delete all saved contexts | "Clear all history" |
+| `Clear history [name]` | Delete saved context files | "Clear history old-project" |
+| `Clear all history` | Delete all saved context files | "Clear all history" |
 | `Add to whitelist [app]` | Protect app from minimize | "Add Chrome to whitelist" |
 | `Remove from whitelist [app]` | Unprotect app | "Remove notepad from whitelist" |
 | `List whitelist` | Show protected apps | "List whitelist" |

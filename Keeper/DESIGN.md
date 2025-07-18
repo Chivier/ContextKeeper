@@ -206,7 +206,8 @@ class WindowsContextManager {
 # Core commands
 "Keep context as [project name]"
 "Restore [project name]"
-"Clear windows" # First perform quick keep, then close windows with kept state
+"Close windows" # First perform quick keep, then close windows with kept state
+"Minimize windows" # Save & minimize all windows (safer than closing)
 
 # Quick commands
 "Quick keep"  # Auto-generate project name from active windows
