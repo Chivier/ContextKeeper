@@ -754,6 +754,64 @@ def memorize(params: dict = None, context: dict = None, system_info: dict = None
         return generate_failure_response(f"Failed to keep context '{context_name}': {str(e)}")
 
 
+def add_to_whitelist(params: dict = None, context: dict = None, system_info: dict = None) -> dict:
+    """Add an application to the minimize whitelist"""
+    if not params:
+        return generate_failure_response("Parameters required.")
+    
+    app_name = params.get("app_name", "").strip()
+    if not app_name:
+        return generate_failure_response("Application name required.")
+    
+    try:
+        added = context_keeper.whitelist_manager.add_to_whitelist(app_name)
+        if added:
+            return generate_success_response(f"Added '{app_name}' to whitelist.")
+        else:
+            return generate_success_response(f"'{app_name}' is already in whitelist.")
+    except Exception as e:
+        logging.error(f"Add to whitelist failed: {e}")
+        return generate_failure_response(f"Failed to add to whitelist: {str(e)}")
+
+
+def remove_from_whitelist(params: dict = None, context: dict = None, system_info: dict = None) -> dict:
+    """Remove an application from the minimize whitelist"""
+    if not params:
+        return generate_failure_response("Parameters required.")
+    
+    app_name = params.get("app_name", "").strip()
+    if not app_name:
+        return generate_failure_response("Application name required.")
+    
+    try:
+        removed = context_keeper.whitelist_manager.remove_from_whitelist(app_name)
+        if removed:
+            return generate_success_response(f"Removed '{app_name}' from whitelist.")
+        else:
+            return generate_success_response(f"'{app_name}' was not in whitelist or is protected.")
+    except Exception as e:
+        logging.error(f"Remove from whitelist failed: {e}")
+        return generate_failure_response(f"Failed to remove from whitelist: {str(e)}")
+
+
+def list_whitelist(params: dict = None, context: dict = None, system_info: dict = None) -> dict:
+    """List all applications in the minimize whitelist"""
+    try:
+        whitelist = context_keeper.whitelist_manager.list_whitelist()
+        
+        if not whitelist:
+            return generate_success_response("Whitelist is empty.")
+        
+        message = "Minimize whitelist:\n"
+        for app in whitelist:
+            message += f"  • {app}\n"
+        
+        return generate_success_response(message.rstrip())
+    except Exception as e:
+        logging.error(f"List whitelist failed: {e}")
+        return generate_failure_response(f"Failed to list whitelist: {str(e)}")
+
+
 def restore_context(params: dict = None, context: dict = None, system_info: dict = None) -> dict:
     if not params:
         return generate_failure_response("Parameters required.")
@@ -878,6 +936,9 @@ def main():
         'clear_windows': clear_windows,
         'minimize_windows': minimize_windows,
         'memorize': memorize,  # Add direct memorize command
+        'add_to_whitelist': add_to_whitelist,
+        'remove_from_whitelist': remove_from_whitelist,
+        'list_whitelist': list_whitelist,
     }
     
     cmd = ''
