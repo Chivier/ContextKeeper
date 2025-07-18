@@ -16,7 +16,7 @@ class QuickResponseHandler:
                            initial_message: str = "Processing...") -> dict:
         """Send immediate response and process in background"""
         
-        # Send immediate acknowledgment
+        # Send immediate 
         self.write_response({
             "success": True,
             "message": initial_message,

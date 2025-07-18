@@ -34,7 +34,7 @@ class EnvironmentManager:
             json.dump(env_vars, f, indent=2, ensure_ascii=False)
         
         self.logger.info(f"Kept {len(env_vars)} environment variables to {env_path}")
-        return env_path
+        return str(env_path)
     
     def restore_environment(self, context_name: str) -> str:
         """Restore environment variables from the latest file"""
@@ -64,7 +64,7 @@ class EnvironmentManager:
         # Optionally create batch file for system-wide restore
         self.create_env_batch(env_vars, context_name)
         
-        return latest_env_file
+        return str(latest_env_file)
     
     def _extract_datetime(self, filename: str) -> datetime:
         """Extract datetime from filename .g_assist_env_YYYYMMDD_HHMMSS.json"""

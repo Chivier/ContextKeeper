@@ -51,6 +51,13 @@ logging.basicConfig(
 
 INDEX_FILE = Path.home() / ".keeper" / "index.json"
 
+# Log initialization
+logging.info("=== PLUGIN INITIALIZATION ===")
+logging.info(f"DATA_DIR: {DATA_DIR}")
+logging.info(f"DATA_DIR exists: {DATA_DIR.exists()}")
+logging.info(f"LOG_FILE: {LOG_FILE}")
+logging.info(f"INDEX_FILE: {INDEX_FILE}")
+
 
 class ContextKeeper:
     """Main context keeper implementation using all components.
@@ -623,15 +630,13 @@ def quick_keep(params: dict = None, context: dict = None, system_info: dict = No
         thread = threading.Thread(target=save_context)
         thread.start()
         
-        # Wait briefly (max 0.3 seconds)
-        thread.join(timeout=0.3)
+        # Wait for completion (max 3 seconds for quick save)
+        thread.join(timeout=3.0)
         
         if thread.is_alive():
-            # Still saving, return quick response
-            message = f"⚡ **Quick Save in Progress!**\n\n"
-            message += f"📌 **Saving as:** `{context_name}`\n\n"
-            message += "💡 **Tip:** Say 'Quick switch' to restore once complete!"
-            return generate_success_response(message)
+            # Still running after 3 seconds
+            logging.error(f"Quick save timed out after 3 seconds")
+            return generate_failure_response(f"❌ Quick save timed out")
         
         # Save completed, show full stats
         if 'error' in save_result:
@@ -690,10 +695,14 @@ def quick_switch(params: dict = None, context: dict = None, system_info: dict = 
 
 def list_contexts(params: dict = None, context: dict = None, system_info: dict = None) -> dict:
     """List all saved contexts with details"""
+    logging.info(f"=== LIST_CONTEXTS START ===")
     try:
+        logging.info(f"DATA_DIR: {DATA_DIR}, exists: {DATA_DIR.exists()}")
         contexts = context_keeper.list_contexts()
+        logging.info(f"Found {len(contexts)} contexts: {contexts}")
         
         if not contexts:
+            logging.info("No contexts found, returning empty message")
             return generate_success_response("📭 No saved workspaces found. Start saving with 'Save workspace as [name]'!")
         
         message = f"📚 **Your Saved Workspaces ({len(contexts)} total)**\n\n"
@@ -701,6 +710,7 @@ def list_contexts(params: dict = None, context: dict = None, system_info: dict =
         for i, ctx_name in enumerate(contexts[:10], 1):  # Show max 10
             try:
                 context_path = DATA_DIR / ctx_name / "context.json"
+                logging.info(f"Reading context {i}: {ctx_name} from {context_path}")
                 with open(context_path, "r", encoding="utf-8") as f:
                     ctx_data = json.load(f)
                 
@@ -722,6 +732,7 @@ def list_contexts(params: dict = None, context: dict = None, system_info: dict =
                 message += f"   📊 {windows_count} windows, {total_tabs} tabs\n\n"
                 
             except Exception as e:
+                logging.error(f"Error reading context {ctx_name}: {e}")
                 message += f"**{i}. {ctx_name}** ⚠️ (Error reading)\n\n"
         
         if len(contexts) > 10:
@@ -729,18 +740,19 @@ def list_contexts(params: dict = None, context: dict = None, system_info: dict =
         
         message += "💡 **Tip:** Say 'Restore [workspace-name]' to switch to any saved workspace!"
         
+        logging.info(f"=== LIST_CONTEXTS END (SUCCESS) ===")
         return generate_success_response(message.rstrip())
         
     except Exception as e:
         logging.error(f"List contexts failed: {e}\n{traceback.format_exc()}")
+        logging.info(f"=== LIST_CONTEXTS END (FAILURE) ===")
         return generate_failure_response(f"❌ Failed to list workspaces: {str(e)}")
 
 
 def close_windows(params: dict = None, context: dict = None, system_info: dict = None) -> dict:
-    """Save context and close all windows (with optional aggressive mode).
+    """Close all windows (with optional aggressive mode).
     
-    This function provides a clean desktop by closing all applications
-    while preserving the current state for later restoration.
+    This function provides a clean desktop by closing all applications.
     
     Modes:
     - Normal: Checks for unsaved documents, closes gracefully
@@ -754,13 +766,9 @@ def close_windows(params: dict = None, context: dict = None, system_info: dict =
     Returns:
         Success response with closure statistics
     """
-    temp_name = "autokeep-" + datetime.now().strftime("%Y%m%d-%H%M%S")
     aggressive = params.get("aggressive", False) if params else False
     
     try:
-        # Log the intent immediately
-        log_context(temp_name)
-        
         # Check for unsaved documents before closing
         unsaved_count = 0
         if not aggressive:  # Skip check in aggressive mode
@@ -770,37 +778,14 @@ def close_windows(params: dict = None, context: dict = None, system_info: dict =
                 doc_list = "\n".join([f"- {doc['application']}: {doc['title']}" for doc in unsaved_docs])
                 logging.warning(f"Found {unsaved_count} unsaved documents:\n{doc_list}")
         
-        # Start context saving in background
-        import threading
-        save_result = {}
-        
-        def save_context():
-            try:
-                save_result['context'] = context_keeper.keep_context(temp_name, quick_mode=True)
-            except Exception as e:
-                save_result['error'] = str(e)
-        
-        save_thread = threading.Thread(target=save_context)
-        save_thread.start()
-        
-        # Close windows immediately (this is usually fast)
+        # Close windows
         counts = context_keeper.windows_manager.close_all_windows(
             force=aggressive,
             whitelist_checker=context_keeper.whitelist_manager.is_whitelisted
         )
         
-        # Wait briefly for save to complete (max 0.2 seconds)
-        save_thread.join(timeout=0.2)
-        
         # Build response message
         message = f"🚪 **Applications Closed!**\n\n"
-        
-        if save_thread.is_alive():
-            # Still saving, show minimal info
-            message += f"💾 **Saving workspace...** (as `{temp_name}`)\n\n"
-        else:
-            # Save completed
-            message += f"💾 **Auto-saved as:** `{temp_name}`\n\n"
         
         if aggressive:
             message += "⚠️ **Mode:** Aggressive (force-terminated)\n\n"
@@ -815,8 +800,7 @@ def close_windows(params: dict = None, context: dict = None, system_info: dict =
             message += f"  🔒 Protected: {counts.get('whitelisted', 0)} (whitelisted)\n"
         message += f"  🔧 System: {counts['excluded']} processes kept\n\n"
         
-        message += "⚠️ **Note:** This command closes applications! Use 'Minimize windows' to hide them instead.\n"
-        message += "💡 **Tip:** Use 'Quick switch' to restore your closed applications!"
+        message += "⚠️ **Note:** This command closes applications! Use 'Minimize windows' to hide them instead."
         
         return generate_success_response(message)
     except Exception as e:
@@ -824,7 +808,7 @@ def close_windows(params: dict = None, context: dict = None, system_info: dict =
 
 
 def minimize_windows(params: dict = None, context: dict = None, system_info: dict = None) -> dict:
-    """Save context and minimize all windows (safer than closing).
+    """Minimize all windows (safer than closing).
     
     This function provides a clean desktop without closing applications.
     It respects the whitelist, keeping specified apps visible.
@@ -838,41 +822,14 @@ def minimize_windows(params: dict = None, context: dict = None, system_info: dic
     Returns:
         Success response with minimize statistics
     """
-    temp_name = "autokeep-" + datetime.now().strftime("%Y%m%d-%H%M%S")
     try:
-        # Log the intent immediately
-        log_context(temp_name)
-        
-        # Start context saving in background
-        import threading
-        save_result = {}
-        
-        def save_context():
-            try:
-                save_result['context'] = context_keeper.keep_context(temp_name, quick_mode=True)
-            except Exception as e:
-                save_result['error'] = str(e)
-        
-        save_thread = threading.Thread(target=save_context)
-        save_thread.start()
-        
-        # Minimize windows immediately
+        # Minimize windows
         counts = context_keeper.windows_manager.minimize_all_windows(
             whitelist_checker=context_keeper.whitelist_manager.is_whitelisted
         )
         
-        # Wait briefly for save to complete (max 0.2 seconds)
-        save_thread.join(timeout=0.2)
-        
         # Build response message
         message = f"🖼️ **Desktop Minimized!**\n\n"
-        
-        if save_thread.is_alive():
-            # Still saving, show minimal info
-            message += f"💾 **Saving workspace...** (as `{temp_name}`)\n\n"
-        else:
-            # Save completed
-            message += f"💾 **Auto-saved as:** `{temp_name}`\n\n"
         
         message += f"📊 **Results:**\n"
         message += f"  📥 Minimized: {counts['minimized']} windows\n"
@@ -881,7 +838,7 @@ def minimize_windows(params: dict = None, context: dict = None, system_info: dic
         else:
             message += "\n"
         
-        message += "💡 **Tip:** Your apps are still running! Say 'Quick switch' to restore the layout."
+        message += "💡 **Tip:** Your apps are still running!"
         
         return generate_success_response(message)
     except Exception as e:
@@ -909,12 +866,18 @@ def memorize(params: dict = None, context: dict = None, system_info: dict = None
     Returns:
         Success response with save statistics or progress message
     """
+    logging.info(f"=== MEMORIZE START ===")
+    logging.info(f"Params: {params}")
+    
     if not params:
+        logging.error("No params provided")
         return generate_failure_response("Parameters required.")
     
     # Support multiple parameter names: realm as project, realm_name, and context_name
     context_name = params.get("realm") or params.get("project") or params.get("realm_name") or params.get("context_name", "unnamed")
     quick_mode = params.get("quick", True)  # Default to quick mode for better performance
+    
+    logging.info(f"Context name: {context_name}, Quick mode: {quick_mode}")
     
     try:
         # For quick response, save minimal context first
@@ -927,20 +890,29 @@ def memorize(params: dict = None, context: dict = None, system_info: dict = None
             save_result = {}
             
             def save_context():
-                save_result['data'] = context_keeper.keep_context(context_name, quick_mode=True)
+                try:
+                    save_result['data'] = context_keeper.keep_context(context_name, quick_mode=True)
+                except Exception as e:
+                    logging.error(f"Error in save thread: {e}", exc_info=True)
+                    save_result['error'] = str(e)
             
             thread = threading.Thread(target=save_context)
             thread.start()
             
-            # Wait briefly (max 0.3 seconds for faster response)
-            thread.join(timeout=0.3)
+            # Wait for completion (max 5 seconds to prevent hanging)
+            thread.join(timeout=5.0)
             
             if thread.is_alive():
-                # Return immediate response while save continues
-                return generate_success_response(f"💾 Saving **{context_name}** workspace...")
-            else:
-                # Completed quickly, return full details
-                context_data = save_result.get('data', {})
+                # Still running after 5 seconds, something is wrong
+                logging.error(f"Save operation timed out after 5 seconds")
+                return generate_failure_response(f"❌ Save operation timed out")
+            
+            # Check for errors first
+            if 'error' in save_result:
+                return generate_failure_response(f"❌ Failed to save workspace: {save_result['error']}")
+            
+            # Completed, return full details
+            context_data = save_result.get('data', {})
         else:
             # Full mode - do everything synchronously
             context_data = context_keeper.keep_context(context_name, quick_mode=quick_mode)
@@ -988,10 +960,12 @@ def memorize(params: dict = None, context: dict = None, system_info: dict = None
         
         message += f"\n💡 **Tip:** Use 'Restore {context_name}' to bring back this exact setup!"
         
+        logging.info(f"=== MEMORIZE END (SUCCESS) ===")
         return generate_success_response(message)
         
     except Exception as e:
         logging.error(f"Keep context failed: {e}\n{traceback.format_exc()}")
+        logging.info(f"=== MEMORIZE END (FAILURE) ===")
         return generate_failure_response(f"❌ Failed to save workspace '{context_name}': {str(e)}")
 
 
@@ -1084,28 +1058,48 @@ def list_whitelist(params: dict = None, context: dict = None, system_info: dict 
 
 def clear_history(params: dict = None, context: dict = None, system_info: dict = None) -> dict:
     """Clear/delete a specific saved context - only deletes saved data, does not close windows"""
+    logging.info(f"=== CLEAR_HISTORY START ===")
+    logging.info(f"Params received: {params}")
+    
     if not params:
+        logging.error("No params provided to clear_history")
         return generate_failure_response("Parameters required.")
     
     # Support multiple parameter names like memorize function
     context_name = params.get("realm") or params.get("project") or params.get("realm_name") or params.get("context_name", "")
     context_name = context_name.strip()
+    logging.info(f"Context name extracted: '{context_name}'")
+    
     if not context_name:
+        logging.error("Empty context name after extraction")
         return generate_failure_response("Context name required.")
     
     try:
         context_path = DATA_DIR / context_name
+        logging.info(f"Context path: {context_path}")
+        logging.info(f"Context path exists: {context_path.exists()}")
         
         # Check if context exists
         if not context_path.exists():
+            logging.error(f"Context path does not exist: {context_path}")
             return generate_failure_response(f"❌ Workspace '{context_name}' not found.")
+        
+        # List contents before deletion
+        logging.info(f"Context directory contents:")
+        try:
+            for item in context_path.iterdir():
+                logging.info(f"  - {item.name} (is_dir: {item.is_dir()}, size: {item.stat().st_size if item.is_file() else 'N/A'})")
+        except Exception as e:
+            logging.error(f"Error listing directory contents: {e}")
         
         # Get info about the context before deleting
         try:
             with open(context_path / "context.json", "r", encoding="utf-8") as f:
                 ctx_data = json.load(f)
             timestamp = ctx_data.get('timestamp', 'Unknown')
-        except:
+            logging.info(f"Context timestamp: {timestamp}")
+        except Exception as e:
+            logging.warning(f"Error reading context.json: {e}")
             timestamp = 'Unknown'
         
         # Remove the context directory and all its contents
@@ -1115,19 +1109,31 @@ def clear_history(params: dict = None, context: dict = None, system_info: dict =
         delete_result = {'success': False, 'error': None}
         
         def delete_context():
+            logging.info(f"Delete thread started for: {context_path}")
             try:
-                shutil.rmtree(context_path)
-                logging.info(f"Cleared context history for '{context_name}'")
+                # Try to remove read-only attributes if any
+                import stat
+                def remove_readonly(func, path, exc_info):
+                    """Error handler for Windows readonly files"""
+                    import os
+                    os.chmod(path, stat.S_IWRITE)
+                    func(path)
+                
+                shutil.rmtree(context_path, onerror=remove_readonly)
+                logging.info(f"Successfully deleted context directory: {context_path}")
                 delete_result['success'] = True
             except Exception as e:
-                logging.error(f"Error deleting context '{context_name}': {e}")
+                logging.error(f"Error in delete thread: {e}", exc_info=True)
                 delete_result['error'] = str(e)
 
         thread = threading.Thread(target=delete_context)
         thread.start()
+        logging.info("Delete thread created and started")
         
         # Wait for deletion to complete (max 2 seconds)
         thread.join(timeout=2.0)
+        logging.info(f"Thread join completed. Is alive: {thread.is_alive()}")
+        logging.info(f"Delete result: {delete_result}")
         
         if thread.is_alive():
             # Still deleting, but we'll return success
@@ -1135,16 +1141,28 @@ def clear_history(params: dict = None, context: dict = None, system_info: dict =
         elif not delete_result['success']:
             # Deletion failed
             if delete_result['error']:
+                logging.error(f"Deletion failed with error: {delete_result['error']}")
                 return generate_failure_response(f"❌ Failed to delete workspace: {delete_result['error']}")
+        
+        # Verify deletion
+        if context_path.exists():
+            logging.error(f"Context path still exists after deletion attempt!")
+        else:
+            logging.info(f"Context path successfully removed")
         
         # Remove from index if exists
         if INDEX_FILE.exists():
             try:
+                logging.info(f"Removing '{context_name}' from index file")
                 index = json.loads(INDEX_FILE.read_text(encoding="utf-8"))
                 if context_name in index:
                     index.remove(context_name)
                     INDEX_FILE.write_text(json.dumps(index, indent=2))
-            except:
+                    logging.info(f"Successfully removed from index")
+                else:
+                    logging.info(f"Context '{context_name}' was not in index")
+            except Exception as e:
+                logging.error(f"Error updating index file: {e}")
                 pass
         
         message = f"🗑️ **Workspace Deleted**\n\n"
@@ -1152,10 +1170,13 @@ def clear_history(params: dict = None, context: dict = None, system_info: dict =
         message += f"📅 **Was saved:** {timestamp}\n\n"
         message += "ℹ️ This only deleted the saved workspace data. Your current windows remain open."
         
+        logging.info(f"Returning success response")
+        logging.info(f"=== CLEAR_HISTORY END (SUCCESS) ===")
         return generate_success_response(message)
         
     except Exception as e:
-        logging.error(f"Clear history failed: {e}\n{traceback.format_exc()}")
+        logging.error(f"Clear history failed with exception: {e}", exc_info=True)
+        logging.info(f"=== CLEAR_HISTORY END (FAILURE) ===")
         return generate_failure_response(f"❌ Failed to delete workspace '{context_name}': {str(e)}")
 
 
@@ -1287,17 +1308,20 @@ def write_response(response: Response) -> None:
         response: Dict with 'success' and 'message' keys
     """
     try:
+        logging.info(f"write_response called with: {response}")
         STD_OUTPUT_HANDLE = -11
         pipe = windll.kernel32.GetStdHandle(STD_OUTPUT_HANDLE)
         # Critical: Add <<END>> terminator
         json_message = json.dumps(response) + "<<END>>"
         message_bytes = json_message.encode("utf-8")
         message_len = len(message_bytes)
-        windll.kernel32.WriteFile(
+        logging.info(f"Sending {message_len} bytes: {json_message[:100]}...")
+        result = windll.kernel32.WriteFile(
             pipe, message_bytes, message_len, wintypes.DWORD(), None
         )
+        logging.info(f"WriteFile result: {result}")
     except Exception as e:
-        logging.error(f"write error: {e}")
+        logging.error(f"write_response error: {e}", exc_info=True)
 
 
 def generate_success_response(message: str = None) -> Response:
@@ -1326,94 +1350,80 @@ def execute_shutdown_command():
 
 
 def main():
-    """Main plugin loop implementing G-Assist communication protocol.
-    
-    This function:
-    1. Reads commands from stdin (named pipe from G-Assist)
-    2. Parses JSON command structure
-    3. Routes to appropriate handler function
-    4. Sends JSON response with <<END>> terminator
-    5. Continues until shutdown command received
-    
-    Protocol format:
-    Input: {"tool_calls": [{"func": "command_name", "params": {...}}]}
-    Output: {"success": true/false, "message": "..."}
-    """
-    # G-Assist protocol constants
-    TOOL_CALLS_PROPERTY = 'tool_calls'
-    CONTEXT_PROPERTY = 'messages'
-    SYSTEM_INFO_PROPERTY = 'system_info'
-    FUNCTION_PROPERTY = 'func'
-    PARAMS_PROPERTY = 'params'
-    INITIALIZE_COMMAND = 'initialize'
-    SHUTDOWN_COMMAND = 'shutdown'
-    
-    commands = {
-        'initialize': execute_initialize_command,
-        'shutdown': execute_shutdown_command,
-        'keep_context': memorize,  # Using memorize function which has proper parameter handling
-        'restore_context': restore_context,
-        'list_contexts': list_contexts,
-        'quick_keep': quick_keep,
-        'quick_switch': quick_switch,
-        'close_windows': close_windows,
-        'minimize_windows': minimize_windows,
-        'memorize': memorize,  # Add direct memorize command
-        'add_to_whitelist': add_to_whitelist,
-        'remove_from_whitelist': remove_from_whitelist,
-        'list_whitelist': list_whitelist,
-        'clear_history': clear_history,
-        'clear_all_history': clear_all_history,
-    }
-    
-    cmd = ''
+    """Main plugin loop implementing G-Assist communication protocol."""
     logging.info('Keeper plugin started')
     
-    while cmd != SHUTDOWN_COMMAND:
-        response = None
-        input_data = read_command()
-        if input_data is None:
-            logging.error('Error reading command')
+    while True:
+        command = read_command()
+        if command is None:
             continue
         
-        logging.info(f'Received input: {input_data}')
+        logging.info(f'Received command: {command}')
         
-        if TOOL_CALLS_PROPERTY in input_data:
-            tool_calls = input_data[TOOL_CALLS_PROPERTY]
-            for tool_call in tool_calls:
-                if FUNCTION_PROPERTY in tool_call:
-                    cmd = tool_call[FUNCTION_PROPERTY]
-                    logging.info(f'Processing command: {cmd}')
-                    if cmd in commands:
-                        if cmd == INITIALIZE_COMMAND or cmd == SHUTDOWN_COMMAND:
-                            response = commands[cmd]()
-                        else:
-                            execute_initialize_command()
-                            params = tool_call.get(PARAMS_PROPERTY, {})
-                            context = tool_call.get(CONTEXT_PROPERTY, {})
-                            system_info = tool_call.get(SYSTEM_INFO_PROPERTY, {})
-                            logging.info(f'Executing command: {cmd} with params: {params}')
-                            response = commands[cmd](params, context, system_info)
-                    else:
-                        logging.warning(f'Unknown command: {cmd}')
-                        response = generate_failure_response(f'Unknown command: {cmd}')
-                else:
-                    logging.warning('Malformed input: missing function property')
-                    response = generate_failure_response('Malformed input.')
-        else:
-            logging.warning('Malformed input: missing tool_calls property')
-            response = generate_failure_response('Malformed input.')
-        
-        logging.info(f'Sending response: {response}')
-        write_response(response)
-        
-        if cmd == SHUTDOWN_COMMAND:
-            logging.info('Shutdown command received, terminating plugin')
-            break
-    
-    logging.info('Keeper plugin stopped.')
-    return 0
+        for tool_call in command.get("tool_calls", []):
+            func = tool_call.get("func")
+            params = tool_call.get("params", {})
+            context = command.get("messages", {})  # Get from command, not tool_call
+            system_info = command.get("system_info", {})  # Get from command, not tool_call
+            
+            logging.info(f'Processing function: {func} with params: {params}')
+            
+            # Handle each command
+            if func == "initialize":
+                response = execute_initialize_command()
+                write_response(response)
+            elif func == "shutdown":
+                response = execute_shutdown_command()
+                write_response(response)
+                logging.info('Shutdown command received, terminating plugin')
+                logging.info('Keeper plugin stopped.')
+                return
+            elif func == "keep_context" or func == "memorize":
+                response = memorize(params, context, system_info)
+                write_response(response)
+            elif func == "restore_context":
+                response = restore_context(params, context, system_info)
+                write_response(response)
+            elif func == "quick_keep":
+                response = quick_keep(params, context, system_info)
+                write_response(response)
+            elif func == "quick_switch":
+                response = quick_switch(params, context, system_info)
+                write_response(response)
+            elif func == "list_contexts":
+                response = list_contexts(params, context, system_info)
+                write_response(response)
+            elif func == "close_windows":
+                response = close_windows(params, context, system_info)
+                write_response(response)
+            elif func == "minimize_windows":
+                response = minimize_windows(params, context, system_info)
+                write_response(response)
+            elif func == "add_to_whitelist":
+                response = add_to_whitelist(params, context, system_info)
+                write_response(response)
+            elif func == "remove_from_whitelist":
+                response = remove_from_whitelist(params, context, system_info)
+                write_response(response)
+            elif func == "list_whitelist":
+                response = list_whitelist(params, context, system_info)
+                write_response(response)
+            elif func == "clear_history":
+                response = clear_history(params, context, system_info)
+                write_response(response)
+            elif func == "clear_all_history":
+                response = clear_all_history(params, context, system_info)
+                write_response(response)
+            else:
+                logging.warning(f'Unknown function: {func}')
+                response = generate_failure_response(f'Unknown function: {func}')
+                write_response(response)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+        sys.exit(0)
+    except Exception as e:
+        logging.error(f"Fatal error in main: {e}", exc_info=True)
+        sys.exit(1)

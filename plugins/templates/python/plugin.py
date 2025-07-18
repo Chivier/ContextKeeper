@@ -166,7 +166,8 @@ def write_response(response:Response) -> None:
         STD_OUTPUT_HANDLE = -11
         pipe = windll.kernel32.GetStdHandle(STD_OUTPUT_HANDLE)
 
-        json_message = json.dumps(response)
+        # Critical: Add <<END>> terminator that G-Assist expects
+        json_message = json.dumps(response) + '<<END>>'
         message_bytes = json_message.encode('utf-8')
         message_len = len(message_bytes)
 
@@ -206,7 +207,7 @@ def generate_success_response(message:str=None) -> Response:
         message: String to be returned in the response (optional)
 
     Returns:
-        A success response with the attached massage
+        A success response with the attached message
     '''
     response = { 'success': True }
     if message:
