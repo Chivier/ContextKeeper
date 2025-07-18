@@ -613,9 +613,37 @@ def log_context(context_name: str):
 def quick_keep(params: dict = None, context: dict = None, system_info: dict = None) -> dict:
     context_name = "auto-" + datetime.now().strftime("%Y%m%d-%H%M%S")
     try:
-        # Keep the context and get detailed data (always use quick mode)
-        context_data = context_keeper.keep_context(context_name, quick_mode=True)
+        # Log the intent immediately
         log_context(context_name)
+        
+        # Start saving in background
+        import threading
+        save_result = {}
+        
+        def save_context():
+            try:
+                save_result['data'] = context_keeper.keep_context(context_name, quick_mode=True)
+            except Exception as e:
+                save_result['error'] = str(e)
+        
+        thread = threading.Thread(target=save_context)
+        thread.start()
+        
+        # Wait briefly (max 0.3 seconds)
+        thread.join(timeout=0.3)
+        
+        if thread.is_alive():
+            # Still saving, return quick response
+            message = f"⚡ **Quick Save in Progress!**\n\n"
+            message += f"📌 **Saving as:** `{context_name}`\n\n"
+            message += "💡 **Tip:** Say 'Quick switch' to restore once complete!"
+            return generate_success_response(message)
+        
+        # Save completed, show full stats
+        if 'error' in save_result:
+            raise Exception(save_result['error'])
+            
+        context_data = save_result.get('data', {})
         
         # Count items for summary
         windows_count = len(context_data.get("windows", {}).get("applications", []))
@@ -736,28 +764,54 @@ def clear_windows(params: dict = None, context: dict = None, system_info: dict =
     aggressive = params.get("aggressive", False) if params else False
     
     try:
-        # Check for unsaved documents before closing
-        if not aggressive:  # Skip check in aggressive mode
-            unsaved_docs = context_keeper.document_tracker.check_unsaved_documents()
-            if unsaved_docs:
-                doc_list = "\n".join([f"- {doc['application']}: {doc['title']}" for doc in unsaved_docs])
-                logging.warning(f"Found {len(unsaved_docs)} unsaved documents:\n{doc_list}")
-        
-        # Keep context first
-        context_keeper.keep_context(temp_name)
+        # Log the intent immediately
         log_context(temp_name)
         
-        # Close all windows (force=True in aggressive mode)
+        # Check for unsaved documents before closing
+        unsaved_count = 0
+        if not aggressive:  # Skip check in aggressive mode
+            unsaved_docs = context_keeper.document_tracker.check_unsaved_documents()
+            unsaved_count = len(unsaved_docs)
+            if unsaved_docs:
+                doc_list = "\n".join([f"- {doc['application']}: {doc['title']}" for doc in unsaved_docs])
+                logging.warning(f"Found {unsaved_count} unsaved documents:\n{doc_list}")
+        
+        # Start context saving in background
+        import threading
+        save_result = {}
+        
+        def save_context():
+            try:
+                save_result['context'] = context_keeper.keep_context(temp_name, quick_mode=True)
+            except Exception as e:
+                save_result['error'] = str(e)
+        
+        save_thread = threading.Thread(target=save_context)
+        save_thread.start()
+        
+        # Close windows immediately (this is usually fast)
         counts = context_keeper.windows_manager.close_all_windows(
             force=aggressive,
             whitelist_checker=context_keeper.whitelist_manager.is_whitelisted
         )
         
+        # Wait briefly for save to complete (max 0.2 seconds)
+        save_thread.join(timeout=0.2)
+        
+        # Build response message
         message = f"🧽 **Desktop Cleared!**\n\n"
-        message += f"💾 **Auto-saved as:** `{temp_name}`\n\n"
+        
+        if save_thread.is_alive():
+            # Still saving, show minimal info
+            message += f"💾 **Saving workspace...** (as `{temp_name}`)\n\n"
+        else:
+            # Save completed
+            message += f"💾 **Auto-saved as:** `{temp_name}`\n\n"
         
         if aggressive:
             message += "⚠️ **Mode:** Aggressive (force-closed)\n\n"
+        elif unsaved_count > 0:
+            message += f"⚠️ **Warning:** {unsaved_count} unsaved documents\n\n"
         
         message += f"📊 **Results:**\n"
         message += f"  ✅ Closed: {counts['closed']} windows\n"
@@ -791,16 +845,40 @@ def minimize_windows(params: dict = None, context: dict = None, system_info: dic
     """
     temp_name = "autokeep-" + datetime.now().strftime("%Y%m%d-%H%M%S")
     try:
-        context_keeper.keep_context(temp_name)
+        # Log the intent immediately
         log_context(temp_name)
         
-        # Minimize all windows except whitelisted ones
+        # Start context saving in background
+        import threading
+        save_result = {}
+        
+        def save_context():
+            try:
+                save_result['context'] = context_keeper.keep_context(temp_name, quick_mode=True)
+            except Exception as e:
+                save_result['error'] = str(e)
+        
+        save_thread = threading.Thread(target=save_context)
+        save_thread.start()
+        
+        # Minimize windows immediately
         counts = context_keeper.windows_manager.minimize_all_windows(
             whitelist_checker=context_keeper.whitelist_manager.is_whitelisted
         )
         
+        # Wait briefly for save to complete (max 0.2 seconds)
+        save_thread.join(timeout=0.2)
+        
+        # Build response message
         message = f"🖼️ **Desktop Minimized!**\n\n"
-        message += f"💾 **Auto-saved as:** `{temp_name}`\n\n"
+        
+        if save_thread.is_alive():
+            # Still saving, show minimal info
+            message += f"💾 **Saving workspace...** (as `{temp_name}`)\n\n"
+        else:
+            # Save completed
+            message += f"💾 **Auto-saved as:** `{temp_name}`\n\n"
+        
         message += f"📊 **Results:**\n"
         message += f"  📥 Minimized: {counts['minimized']} windows\n"
         if counts['skipped'] > 0:
