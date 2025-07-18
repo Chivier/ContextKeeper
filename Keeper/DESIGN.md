@@ -1,4 +1,4 @@
-## Context Keeper
+## Keeper
 
 ### 🎯 Core Function Positioning
 
@@ -204,26 +204,26 @@ class WindowsContextManager {
 
 ```bash
 # Core commands
-"Save context as [project name]"
+"Keep context as [project name]"
 "Restore [project name]"
-"Clear windows" # First perform quick save, then close windows with saved state
+"Clear windows" # First perform quick keep, then close windows with kept state
 
 # Quick commands
-"Quick save"  # Auto-generate project name from active windows
+"Quick keep"  # Auto-generate project name from active windows
 "Quick switch" # List recent 5 contexts for selection
-"Save tabs only" # Save only browser tabs
+"Keep tabs only" # Keep only browser tabs
 "Restore tabs only" # Restore only browser tabs
-"Save layout only" # Save only window positions
+"Keep layout only" # Keep only window positions
 "Restore layout only" # Restore only window positions
 ```
 
 ### ⚡ Implementation Strategy
 
-#### 1. **Save Process**
+#### 1. **Keep Process**
 
 ```mermaid
 graph TD
-    A[Start saving] --> B[Check unsaved documents]
+    A[Start keeping] --> B[Check unsaved documents]
     B --> C{Any unsaved?}
     C -->|Yes| D[Prompt user to save]
     C -->|No| E[Enumerate all windows]
@@ -234,7 +234,7 @@ graph TD
     H --> I[Collect application state]
     I --> J[Export environment variables]
     J --> K[Extract browser tabs]
-    K --> L[Save clipboard]
+    K --> L[Keep clipboard]
     L --> M[Generate JSON file]
 ```
 
@@ -243,8 +243,8 @@ graph TD
 ```mermaid
 graph TD
     A[Start restore] --> B[Check current unsaved items]
-    B --> C{Need to save?}
-    C -->|Yes| D[Prompt to save current state]
+    B --> C{Need to keep?}
+    C -->|Yes| D[Prompt to keep current state]
     C -->|No| E[Close all windows?]
     D --> E
     E --> F[Read JSON file]
@@ -302,8 +302,8 @@ class BrowserTabExtractor:
 ```python
 # Direct environment variable management
 class EnvironmentManager:
-    def save_environment(self, context_name):
-        """Save ALL current environment variables to timestamped file"""
+    def keep_environment(self, context_name):
+        """Keep ALL current environment variables to timestamped file"""
         import os
         import json
         from datetime import datetime
@@ -314,14 +314,14 @@ class EnvironmentManager:
         # Create timestamp
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         
-        # Save to file with specific naming pattern
+        # Keep to file with specific naming pattern
         env_file = f".g_assist_env_{timestamp}.json"
         env_path = os.path.join("contexts", context_name, env_file)
         
         # Ensure directory exists
         os.makedirs(os.path.dirname(env_path), exist_ok=True)
         
-        # Save all environment variables
+        # Keep all environment variables
         with open(env_path, 'w', encoding='utf-8') as f:
             json.dump(env_vars, f, indent=2, ensure_ascii=False)
         
@@ -448,13 +448,13 @@ Usage Example:
 ```python
 # In the main ContextKeeper class
 class ContextKeeper:
-    def save_context(self, context_name):
-        """Save current context"""
-        # … other save operations …
+    def keep_context(self, context_name):
+        """Keep current context"""
+        # … other keep operations …
         
-        # Save environment variables
+        # Keep environment variables
         env_manager = EnvironmentManager()
-        env_path = env_manager.save_environment(context_name)
+        env_path = env_manager.keep_environment(context_name)
         
         # Include reference in context data
         context_data['environmentSnapshot'] = env_path
@@ -539,17 +539,17 @@ Error Scenarios:
 ```python
 # Log format
 {
-    "action": "save_context",
+    "action": "keep_context",
     "timestamp": "2025-07-17T10:30:00Z",
     "context_name": "pytorch-research",
     "duration_ms": 2500,
     "stats": {
-        "windows_saved": 8,
+        "windows_kept": 8,
         "browser_tabs": 42,
         "terminal_tabs": 5,
         "env_variables": 23
     },
-    "warnings": ["Arc browser tabs saved with limited info"],
+    "warnings": ["Arc browser tabs kept with limited info"],
     "errors": []
 }
 ```

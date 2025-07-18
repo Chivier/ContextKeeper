@@ -1,0 +1,23 @@
+{
+  "manifestVersion": 1,
+  "executable": "g-assist-plugin-contextkeeper.exe",
+  "persistent": true,
+  "functions": [
+    {
+      "name": "save_workspace",
+      "description": "Save the current workspace",
+      "tags": ["save", "workspace"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name for the workspace"
+        }
+      }
+    },
+    {
+      "name": "list_workspaces",
+      "description": "List all saved workspaces",
+      "tags": ["list", "workspace"]
+    }
+  ]
+}

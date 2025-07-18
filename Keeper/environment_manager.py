@@ -14,8 +14,8 @@ class EnvironmentManager:
     def __init__(self):
         self.logger = logging.getLogger(__name__)
     
-    def save_environment(self, context_name: str) -> str:
-        """Save ALL current environment variables to timestamped file"""
+    def keep_environment(self, context_name: str) -> str:
+        """Keep ALL current environment variables to timestamped file"""
         # Get all environment variables
         env_vars = dict(os.environ)
         
@@ -33,7 +33,7 @@ class EnvironmentManager:
         with open(env_path, 'w', encoding='utf-8') as f:
             json.dump(env_vars, f, indent=2, ensure_ascii=False)
         
-        self.logger.info(f"Saved {len(env_vars)} environment variables to {env_path}")
+        self.logger.info(f"Kept {len(env_vars)} environment variables to {env_path}")
         return env_path
     
     def restore_environment(self, context_name: str) -> str:

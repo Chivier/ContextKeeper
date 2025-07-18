@@ -1,0 +1,54 @@
+{
+  "manifestVersion": 1,
+  "executable": "g-assist-plugin-keeper.exe",
+  "persistent": true,
+  "functions": [
+    {
+      "name": "keep_context",
+      "description": "Saves the current desktop workspace including all open windows, browser tabs, and environment settings",
+      "tags": ["save", "workspace", "context", "desktop", "windows", "keep", "store", "remember"],
+      "properties": {
+        "context_name": {
+          "type": "string",
+          "description": "The name to keep this context as"
+        }
+      }
+    },
+    {
+      "name": "restore_context",
+      "description": "Restores a previously saved workspace with all windows, tabs and settings",
+      "tags": ["restore", "workspace", "context", "switch", "open", "load", "resume"],
+      "properties": {
+        "context_name": {
+          "type": "string",
+          "description": "The name of the context to restore"
+        }
+      }
+    },
+    {
+      "name": "list_contexts",
+      "description": "Lists all saved workspaces and contexts with details",
+      "tags": ["list", "show", "workspace", "workspaces", "saved", "contexts", "view", "display"]
+    },
+    {
+      "name": "quick_keep",
+      "description": "Quickly saves the current workspace with an auto-generated name",
+      "tags": ["quick", "save", "fast", "snapshot", "backup", "everything", "now"]
+    },
+    {
+      "name": "quick_switch",
+      "description": "Switches to the most recently saved workspace",
+      "tags": ["switch", "quick", "back", "previous", "last", "recent", "toggle"]
+    },
+    {
+      "name": "clear_windows",
+      "description": "Saves the current workspace then closes all windows for a clean desktop",
+      "tags": ["clear", "close", "clean", "windows", "everything", "all", "fresh"]
+    },
+    {
+      "name": "minimize_windows",
+      "description": "Saves the current workspace then minimizes all windows to show desktop",
+      "tags": ["minimize", "hide", "desktop", "windows", "all", "everything"]
+    }
+  ]
+}

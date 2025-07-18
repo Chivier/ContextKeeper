@@ -1,9 +1,23 @@
-# Context Keeper Plugin for NVIDIA G-Assist
+# Keeper Plugin for NVIDIA G-Assist
 
-Transform your Windows development workflow with intelligent context management! This plugin lets you save and restore your complete development environment through the G-Assist platform. Whether you're switching between projects or resuming work sessions, maintaining your perfect development setup has never been easier.
+Transform your Windows development workflow with intelligent context management! This plugin lets you keep and restore your complete development environment through the G-Assist platform. Whether you're switching between projects or resuming work sessions, maintaining your perfect development setup has never been easier.
+
+## 🎯 Important: Magic Commands API
+
+To avoid conflicts with G-Assist's gaming features (like instant replay), Keeper uses **magic-themed commands**:
+
+- **`Memorize`** instead of "save" or "keep"
+- **`Recall`** instead of "restore" 
+- **`Snapshot`** for quick saves
+- **`Grimoire`** to list saved contexts
+- **`Timeshift`** to switch to recent context
+- **`Vanish`** to save & close all
+- **`Shroud`** to save & minimize all
+
+Example: Say "Memorize realm as project1" instead of "save workspace as project1"
 
 ## What Can It Do?
-- **Complete Environment Capture**: Save your entire Windows development context including:
+- **Complete Environment Capture**: Keep your entire Windows development context including:
   - IDE projects and open files (VSCode, Cursor, JetBrains Suite)
   - Terminal sessions with working directories and environment variables
   - Browser tabs with full organization and grouping
@@ -36,7 +50,7 @@ Make sure you have:
 ### Step 1: Get the Files
 ```bash
 git clone <repository-url>
-cd ContextKeeper/src
+cd Keeper/src
 ```
 This downloads all the necessary files to your computer.
 
@@ -65,7 +79,7 @@ This creates the executable and prepares all necessary files.
 ```
 
 💡 **Tip**: Make sure all files are copied, including:
-- The executable (`g-assist-plugin-contextkeeper.exe`)
+- The executable (`g-assist-plugin-keeper.exe`)
 - `manifest.json`
 - Configuration files
 
@@ -74,49 +88,81 @@ This creates the executable and prepares all necessary files.
 ### Basic Commands
 Once everything is set up, you can manage your development contexts through simple voice commands:
 
-**Saving Contexts:**
-- "Save context as [project-name]"
-- "Quick save current setup"
-- "Save my development environment"
+**Saving Contexts (Magic Commands):**
+- "Memorize realm as [project-name]"
+- "Memorize [project-name]"
+- "Snapshot" (quick save with timestamp)
 
 **Restoring Contexts:**
-- "Restore [project-name]"
-- "Load my pytorch project"
-- "Switch to web development context"
+- "Recall [project-name]"
+- "Recall my pytorch project"
+- "Timeshift" (switch to most recent)
 
 **Management Commands:**
-- "List saved contexts"
-- "Clear current windows"
-- "Quick switch" (shows recent contexts)
+- "Grimoire" (list all saved contexts)
+- "Vanish" (save & close all windows)
+- "Shroud" (save & minimize all windows)
+
+> **Note**: We use magic-themed commands to avoid conflicts with G-Assist's gaming features. Words like "save", "keep", and "capture" may trigger instant replay recording.
 
 ### Example Usage
 
-**Saving a Machine Learning Project:**
+**Memorizing a Machine Learning Project:**
 ```
-You: "Save context as pytorch-research"
-G-Assist: "Saving context 'pytorch-research'..."
-✓ Saved 8 windows
-✓ Saved 42 browser tabs
-✓ Saved 5 terminal sessions
-✓ Saved 23 environment variables
-✓ Context saved successfully!
+You: "Memorize realm as pytorch-research"
+G-Assist: "✨ Realm 'pytorch-research' has been MEMORIZED! ✨"
+📚 Windows preserved: 8
+🌐 Browser portals: 42
+📜 Sacred scrolls (IDE files): 15
+🔮 Terminal crystals: 5
+🗝️ Enchanted variables: 23
 ```
 
 **Restoring a Web Development Environment:**
 ```
-You: "Restore my react project"
-G-Assist: "Restoring 'react-project' context..."
-✓ Restored VSCode workspace
-✓ Restored 3 terminal tabs
-✓ Restored 15 browser tabs
-✓ Restored environment variables
-✓ Context restored successfully!
+You: "Recall react-project"
+G-Assist: "✨ Realm 'react-project' has been SUMMONED! ✨"
+🪟 Windows conjured: 6
+🌐 Browser portals opened: 15
+🗝️ Enchanted variables: Restored
+📅 Originally cast at: 2025-07-18T10:30:00Z
+```
+
+**Quick Save/Restore:**
+```
+You: "Snapshot"
+G-Assist: "💎 Realm CRYSTALLIZED instantly!"
+✨ Preserved as: crystal-20250718-103045
+🪟 Windows: 12
+🌐 Browser portals: 35
+⚡ Use 'timeshift' to return instantly!
+
+You: "Timeshift"
+G-Assist: "🌀 Recent temporal anchors:"
+1. crystal-20250718-103045
+2. pytorch-research
+3. react-project
+⚡ Warping to: crystal-20250718-103045
+```
+
+**Viewing All Saved Realms:**
+```
+You: "Grimoire"
+G-Assist: "📖 The Grimoire reveals 5 memorized realms:"
+✨ pytorch-research:
+  📅 Cast on: 2025-07-18T09:15:00Z
+  🪟 Windows: 8, 🌐 Portals: 42
+
+✨ react-project:
+  📅 Cast on: 2025-07-17T14:22:00Z
+  🪟 Windows: 6, 🌐 Portals: 15
+...
 ```
 
 ## Advanced Features
 
 ### Environment Variable Management
-The plugin automatically saves and restores:
+The plugin automatically keeps and restores:
 - PATH configurations
 - Development tool paths (Node.js, Python, etc.)
 - API keys and tokens
@@ -174,7 +220,7 @@ Maintains terminal configurations:
 ## Troubleshooting Tips
 
 ### Common Issues
-- **Context not saving completely?**
+- **Context not keeping completely?**
   - Run G-Assist as administrator
   - Check if applications are responding
   - Review the log file for specific errors
@@ -192,7 +238,7 @@ Maintains terminal configurations:
 ### Logging
 The plugin logs all activity to:
 ```
-%USERPROFILE%\contextkeeper.log
+%USERPROFILE%\keeper.log
 ```
 Check this file for detailed error messages and debugging information.
 
@@ -206,7 +252,7 @@ Some operations require elevated privileges:
 
 Contexts are saved as JSON files in:
 ```
-%USERPROFILE%\ContextKeeper\contexts\[context-name]\
+%USERPROFILE%\Keeper\contexts\[context-name]\
 ```
 
 Each context includes:
@@ -218,30 +264,36 @@ Each context includes:
 
 ## Voice Commands Reference
 
+### Magic Commands (Recommended)
 | Command | Description | Example |
 |---------|-------------|---------|
-| `Save context as [name]` | Save current environment | "Save context as pytorch-research" |
-| `Restore [name]` | Restore saved environment | "Restore my web project" |
-| `Quick save` | Auto-save with timestamp | "Quick save current setup" |
-| `Quick switch` | Show recent contexts | "Quick switch to another project" |
-| `List contexts` | Show all saved contexts | "List my saved contexts" |
-| `Clear windows` | Close all windows safely | "Clear current windows" |
-| `Save tabs only` | Save only browser tabs | "Save my browser tabs" |
-| `Save layout only` | Save only window positions | "Save current window layout" |
-| `Restore tabs only` | Restore only browser tabs | "Restore my browser tabs" |
-| `Restore layout only` | Restore only window positions | "Restore current window layout" |
+| `Memorize [name]` | Save current environment | "Memorize realm as pytorch-research" |
+| `Recall [name]` | Restore saved environment | "Recall my web project" |
+| `Snapshot` | Quick save with timestamp | "Snapshot" |
+| `Timeshift` | Switch to most recent | "Timeshift" |
+| `Grimoire` | List all saved realms | "Grimoire" |
+| `Vanish` | Save & close all windows | "Vanish" |
+| `Shroud` | Save & minimize all windows | "Shroud" |
+
+### Legacy Commands (May trigger G-Assist)
+| Command | Description | Note |
+|---------|-------------|------|
+| `Keep context as [name]` | Save environment | ⚠️ May trigger instant replay |
+| `Restore [name]` | Restore environment | ✅ Safe to use |
+| `Quick keep` | Auto-save | ⚠️ May trigger instant replay |
+| `Save workspace` | Save current setup | ⚠️ Will trigger instant replay |
 
 ## Security and Privacy
 
 ### Data Protection
-- All contexts are saved locally on your machine
+- All contexts are kept locally on your machine
 - No data is transmitted to external servers
 - Environment variables are encrypted when stored
 - Sensitive information can be excluded from snapshots
 
 ### Permissions
 The plugin requires:
-- File system access for saving contexts
+- File system access for keeping contexts
 - Process enumeration for application detection
 - Window management permissions
 - Network access for browser tab extraction (local only)
@@ -249,14 +301,14 @@ The plugin requires:
 ## Performance Considerations
 
 ### Optimization Features
-- Incremental context saving
+- Incremental context keeping
 - Background processing for large environments
 - Selective application targeting
 - Efficient browser tab batching
 
 ### Resource Usage
 - Minimal memory footprint during idle state
-- CPU usage spikes only during save/restore operations
+- CPU usage spikes only during keep/restore operations
 - Disk usage depends on context complexity
 - Network usage limited to local browser debugging
 
@@ -274,4 +326,4 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 
 ---
 
-*Streamline your development workflow with Context Keeper - because your perfect development environment should be just a voice command away!*
+*Streamline your development workflow with Keeper - because your perfect development environment should be just a voice command away!*

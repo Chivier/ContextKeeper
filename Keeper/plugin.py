@@ -20,16 +20,16 @@ from ide_tracker import IDETracker
 from document_tracker import DocumentTracker
 
 type Response = dict[bool, Optional[str]]
-DATA_DIR = Path.home() / ".context_keeper" / "contexts"
+DATA_DIR = Path.home() / ".keeper" / "contexts"
 
-LOG_FILE = Path.home() / "context_keeper_plugin.log"
+LOG_FILE = Path.home() / "keeper_plugin.log"
 logging.basicConfig(
     filename=LOG_FILE,
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
 
-INDEX_FILE = Path.home() / ".context_keeper" / "index.json"
+INDEX_FILE = Path.home() / ".keeper" / "index.json"
 
 
 class ContextKeeper:
@@ -44,8 +44,8 @@ class ContextKeeper:
         self.document_tracker = DocumentTracker()
         self.logger = logging.getLogger(__name__)
         
-    def save_context(self, context_name: str) -> Dict:
-        """Save complete context as per DESIGN.md"""
+    def keep_context(self, context_name: str) -> Dict:
+        """Keep complete context as per DESIGN.md"""
         context_data = {
             "contextName": context_name,
             "timestamp": datetime.now().isoformat() + "Z",
@@ -68,8 +68,8 @@ class ContextKeeper:
             # Save system state
             context_data["windows"]["system"] = self._save_system_state()
             
-            # Save environment variables with timestamp
-            env_path = self.env_manager.save_environment(context_name)
+            # Keep environment variables with timestamp
+            env_path = self.env_manager.keep_environment(context_name)
             context_data["environmentSnapshot"] = env_path
             
             # Get current environment for immediate reference
@@ -99,7 +99,7 @@ class ContextKeeper:
             # Clean up old environment snapshots
             self.env_manager.cleanup_old_snapshots(context_name, keep_last=10)
             
-            self.logger.info(f"Context '{context_name}' saved successfully")
+            self.logger.info(f"Context '{context_name}' kept successfully")
             return context_data
             
         except Exception as e:
@@ -107,7 +107,7 @@ class ContextKeeper:
             raise
     
     def _save_system_state(self) -> Dict:
-        """Save system-level state"""
+        """Keep system-level state"""
         system_state = {
             "volume": self._get_system_volume(),
             "doNotDisturb": self._get_do_not_disturb_status(),
@@ -191,14 +191,14 @@ class ContextKeeper:
             return 'Default'
     
     def _save_clipboard(self, context_name: str):
-        """Save clipboard content"""
+        """Keep clipboard content"""
         try:
             clipboard_data = pyperclip.paste()
             clipboard_path = DATA_DIR / context_name / "clipboard_cache.txt"
             clipboard_path.parent.mkdir(parents=True, exist_ok=True)
             clipboard_path.write_text(clipboard_data, encoding="utf-8")
         except Exception as e:
-            self.logger.warning(f"Failed to save clipboard: {e}")
+            self.logger.warning(f"Failed to capture clipboard: {e}")
     
     def _process_window(self, window: WindowInfo, context_data: Dict):
         """Process a window and add to appropriate category"""
@@ -488,19 +488,35 @@ def log_context(context_name: str):
     INDEX_FILE.write_text(json.dumps(index, indent=2))
 
 
-def quick_save(*_):
+def quick_keep(params: dict = None, context: dict = None, system_info: dict = None) -> dict:
     context_name = "auto-" + datetime.now().strftime("%Y%m%d-%H%M%S")
     try:
-        context_keeper.save_context(context_name)
+        # Keep the context and get detailed data
+        context_data = context_keeper.keep_context(context_name)
         log_context(context_name)
-        return generate_success_response(f"Quick saved as '{context_name}'")
+        
+        # Count items for summary
+        windows_count = len(context_data.get("windows", {}).get("applications", []))
+        browsers_count = len(context_data.get("browsers", []))
+        total_tabs = sum(len(b.get("tabs", [])) for b in context_data.get("browsers", []))
+        
+        message = f"Quick keep SUCCESSFUL!\n"
+        message += f"Saved as: {context_name}\n"
+        message += f"Windows: {windows_count}\n"
+        message += f"Browser tabs: {total_tabs}\n"
+        message += "Use 'Quick switch' to restore instantly!"
+        
+        return generate_success_response(message)
+        
     except Exception as e:
-        return generate_failure_response(f"Quick save failed: {str(e)}")
+        logging.error(f"Quick keep failed: {e}\n{traceback.format_exc()}")
+        return generate_failure_response(f"Quick keep failed: {str(e)}")
 
 
-def quick_switch(*_):
+def quick_switch(params: dict = None, context: dict = None, system_info: dict = None) -> dict:
     if not INDEX_FILE.exists():
         return generate_failure_response("No recent contexts available.")
+    
     try:
         index = json.loads(INDEX_FILE.read_text(encoding="utf-8"))
     except:
@@ -508,13 +524,60 @@ def quick_switch(*_):
 
     if not index:
         return generate_failure_response("Context list is empty.")
+    
+    # Show recent contexts list
+    message = "Recent contexts:\n"
+    for i, ctx in enumerate(index[:5], 1):
+        message += f"{i}. {ctx}\n"
+    
+    message += f"\nSwitching to: {index[0]}\n"
+    
     # Restore most recent context
     context_name = index[0]
-    return restore_context({"context_name": context_name})
+    return restore_context({"context_name": context_name}, context, system_info)
 
 
-def clear_windows(*_):
-    temp_name = "autosave-" + datetime.now().strftime("%Y%m%d-%H%M%S")
+def list_contexts(params: dict = None, context: dict = None, system_info: dict = None) -> dict:
+    """List all saved contexts with details"""
+    try:
+        contexts = context_keeper.list_contexts()
+        
+        if not contexts:
+            return generate_success_response("No saved contexts found.")
+        
+        message = f"Found {len(contexts)} saved contexts:\n\n"
+        
+        for ctx_name in contexts[:20]:  # Show max 20
+            try:
+                context_path = DATA_DIR / ctx_name / "context.json"
+                with open(context_path, "r", encoding="utf-8") as f:
+                    ctx_data = json.load(f)
+                
+                # Get stats
+                windows_count = len(ctx_data.get("windows", {}).get("applications", []))
+                browsers_count = len(ctx_data.get("browsers", []))
+                total_tabs = sum(len(b.get("tabs", [])) for b in ctx_data.get("browsers", []))
+                timestamp = ctx_data.get("timestamp", "Unknown")
+                
+                message += f"{ctx_name}:\n"
+                message += f"  Saved: {timestamp}\n"
+                message += f"  Windows: {windows_count}, Tabs: {total_tabs}\n\n"
+                
+            except Exception as e:
+                message += f"{ctx_name}: (Error reading)\n\n"
+        
+        if len(contexts) > 20:
+            message += f"...and {len(contexts) - 20} more contexts"
+        
+        return generate_success_response(message.rstrip())
+        
+    except Exception as e:
+        logging.error(f"List contexts failed: {e}\n{traceback.format_exc()}")
+        return generate_failure_response(f"Failed to list contexts: {str(e)}")
+
+
+def clear_windows(params: dict = None, context: dict = None, system_info: dict = None) -> dict:
+    temp_name = "autokeep-" + datetime.now().strftime("%Y%m%d-%H%M%S")
     try:
         # Check for unsaved documents before closing
         unsaved_docs = context_keeper.document_tracker.check_unsaved_documents()
@@ -523,15 +586,15 @@ def clear_windows(*_):
             logging.warning(f"Found {len(unsaved_docs)} unsaved documents:\n{doc_list}")
             # In a real implementation, this would prompt the user
         
-        # Save context first
-        context_keeper.save_context(temp_name)
+        # Keep context first
+        context_keeper.keep_context(temp_name)
         log_context(temp_name)
         
         # Close all windows (excluding system processes)
         counts = context_keeper.windows_manager.close_all_windows(force=False)
         
         return generate_success_response(
-            f"Context saved as '{temp_name}'. "
+            f"Context kept as '{temp_name}'. "
             f"Closed: {counts['closed']} windows, "
             f"Failed: {counts['failed']}, "
             f"Excluded: {counts['excluded']} system processes."
@@ -540,43 +603,112 @@ def clear_windows(*_):
         return generate_failure_response(f"Clear windows failed: {str(e)}")
 
 
-def minimize_windows(*_):
+def minimize_windows(params: dict = None, context: dict = None, system_info: dict = None) -> dict:
     """Safer alternative that just minimizes windows instead of closing them"""
-    temp_name = "autosave-" + datetime.now().strftime("%Y%m%d-%H%M%S")
+    temp_name = "autokeep-" + datetime.now().strftime("%Y%m%d-%H%M%S")
     try:
-        context_keeper.save_context(temp_name)
+        context_keeper.keep_context(temp_name)
         log_context(temp_name)
         
         # Minimize all windows
         count = context_keeper.windows_manager.minimize_all_windows()
         
-        return generate_success_response(f"Context saved as '{temp_name}' and {count} windows minimized.")
+        return generate_success_response(f"Context kept as '{temp_name}' and {count} windows minimized.")
     except Exception as e:
         return generate_failure_response(f"Minimize windows failed: {str(e)}")
 
 
-def save_context(params=None, *_):
-    context_name = params.get("context_name", "unnamed")
+def memorize(params: dict = None, context: dict = None, system_info: dict = None) -> dict:
+    """Magic spell to memorize current realm (workspace)"""
+    if not params:
+        return generate_failure_response("Parameters required.")
+    # Support multiple parameter names: realm as project, realm_name, and context_name
+    context_name = params.get("realm") or params.get("project") or params.get("realm_name") or params.get("context_name", "unnamed")
+    
     try:
-        context_keeper.save_context(context_name)
+        # Keep the context and get detailed data
+        context_data = context_keeper.keep_context(context_name)
         log_context(context_name)
-        return generate_success_response(f"Context '{context_name}' saved.")
+        
+        # Extract statistics from the saved context
+        windows_count = len(context_data.get("windows", {}).get("applications", []))
+        browsers_count = len(context_data.get("browsers", []))
+        
+        # Count browser tabs
+        total_tabs = 0
+        for browser in context_data.get("browsers", []):
+            total_tabs += len(browser.get("tabs", []))
+        
+        # Count IDE files
+        total_files = 0
+        for app in context_data.get("windows", {}).get("applications", []):
+            if app.get("type") in ["vscode", "cursor", "pycharm", "intellij_idea"]:
+                total_files += len(app.get("openFiles", []))
+        
+        # Count terminal tabs
+        terminal_tabs = 0
+        for app in context_data.get("windows", {}).get("applications", []):
+            if app.get("type") in ["windows_terminal", "cmd", "powershell"]:
+                terminal_tabs += len(app.get("tabs", []))
+        
+        # Count environment variables
+        env_vars_count = len(context_data.get("environmentVariables", {}))
+        
+        # Build detailed response message
+        message = f"{context_name} context KEPT!\n"
+        message += f"Windows: {windows_count}\n"
+        message += f"Browser tabs: {total_tabs}\n"
+        if total_files > 0:
+            message += f"IDE files: {total_files}\n"
+        if terminal_tabs > 0:
+            message += f"Terminal sessions: {terminal_tabs}\n"
+        message += f"Environment variables: {env_vars_count}"
+        
+        return generate_success_response(message)
+        
     except Exception as e:
-        return generate_failure_response(f"Save failed: {str(e)}")
+        logging.error(f"Keep context failed: {e}\n{traceback.format_exc()}")
+        return generate_failure_response(f"Failed to keep context '{context_name}': {str(e)}")
 
 
-def restore_context(params=None, *_):
+def restore_context(params: dict = None, context: dict = None, system_info: dict = None) -> dict:
+    if not params:
+        return generate_failure_response("Parameters required.")
     context_name = params.get("context_name", "")
     if not context_name:
         return generate_failure_response("Context name required.")
         
     try:
-        if context_keeper.restore_context(context_name):
-            return generate_success_response(f"Context '{context_name}' restored.")
-        else:
+        # Check if context exists
+        context_path = DATA_DIR / context_name / "context.json"
+        if not context_path.exists():
             return generate_failure_response(f"Context '{context_name}' not found.")
+        
+        # Load context data to show what will be restored
+        with open(context_path, "r", encoding="utf-8") as f:
+            context_data = json.load(f)
+        
+        # Count items
+        windows_count = len(context_data.get("windows", {}).get("applications", []))
+        browsers_count = len(context_data.get("browsers", []))
+        total_tabs = sum(len(b.get("tabs", [])) for b in context_data.get("browsers", []))
+        
+        # Perform the restoration
+        success = context_keeper.restore_context(context_name)
+        
+        if success:
+            message = f"{context_name} context RESTORED!\n"
+            message += f"Windows restored: {windows_count}\n"
+            message += f"Browser tabs restored: {total_tabs}\n"
+            message += "Environment variables: Restored\n"
+            message += f"Originally kept at: {context_data.get('timestamp', 'Unknown')}"
+            return generate_success_response(message)
+        else:
+            return generate_failure_response(f"Failed to restore context '{context_name}'.")
+            
     except Exception as e:
-        return generate_failure_response(f"Restore failed: {str(e)}")
+        logging.error(f"Restore context failed: {e}\n{traceback.format_exc()}")
+        return generate_failure_response(f"Failed to restore context '{context_name}': {str(e)}")
 
 
 def read_command() -> dict | None:
@@ -644,31 +776,74 @@ def execute_shutdown_command():
 
 
 def main():
+    TOOL_CALLS_PROPERTY = 'tool_calls'
+    CONTEXT_PROPERTY = 'messages'
+    SYSTEM_INFO_PROPERTY = 'system_info'
+    FUNCTION_PROPERTY = 'func'
+    PARAMS_PROPERTY = 'params'
+    INITIALIZE_COMMAND = 'initialize'
+    SHUTDOWN_COMMAND = 'shutdown'
+    
     commands = {
-        "initialize": execute_initialize_command,
-        "shutdown": execute_shutdown_command,
-        "save_context": save_context,
-        "restore_context": restore_context,
-        "quick_save": quick_save,
-        "quick_switch": quick_switch,
-        "clear_windows": clear_windows,
-        "minimize_windows": minimize_windows,
+        'initialize': execute_initialize_command,
+        'shutdown': execute_shutdown_command,
+        'keep_context': memorize,  # Using memorize function which has proper parameter handling
+        'restore_context': restore_context,
+        'list_contexts': list_contexts,
+        'quick_keep': quick_keep,
+        'quick_switch': quick_switch,
+        'clear_windows': clear_windows,
+        'minimize_windows': minimize_windows,
+        'memorize': memorize,  # Add direct memorize command
     }
-    cmd = ""
-    while cmd != "shutdown":
+    
+    cmd = ''
+    logging.info('Keeper plugin started')
+    
+    while cmd != SHUTDOWN_COMMAND:
+        response = None
         input_data = read_command()
-        if input_data and "tool_calls" in input_data:
-            for call in input_data["tool_calls"]:
-                func = call.get("func", "")
-                props = call.get("properties", {})
-                if func in commands:
-                    cmd = func
-                    response = commands[func](props)
+        if input_data is None:
+            logging.error('Error reading command')
+            continue
+        
+        logging.info(f'Received input: {input_data}')
+        
+        if TOOL_CALLS_PROPERTY in input_data:
+            tool_calls = input_data[TOOL_CALLS_PROPERTY]
+            for tool_call in tool_calls:
+                if FUNCTION_PROPERTY in tool_call:
+                    cmd = tool_call[FUNCTION_PROPERTY]
+                    logging.info(f'Processing command: {cmd}')
+                    if cmd in commands:
+                        if cmd == INITIALIZE_COMMAND or cmd == SHUTDOWN_COMMAND:
+                            response = commands[cmd]()
+                        else:
+                            execute_initialize_command()
+                            params = tool_call.get(PARAMS_PROPERTY, {})
+                            context = tool_call.get(CONTEXT_PROPERTY, {})
+                            system_info = tool_call.get(SYSTEM_INFO_PROPERTY, {})
+                            logging.info(f'Executing command: {cmd} with params: {params}')
+                            response = commands[cmd](params, context, system_info)
+                    else:
+                        logging.warning(f'Unknown command: {cmd}')
+                        response = generate_failure_response(f'Unknown command: {cmd}')
                 else:
-                    response = generate_failure_response("Unknown function")
-                write_response(response)
+                    logging.warning('Malformed input: missing function property')
+                    response = generate_failure_response('Malformed input.')
         else:
-            write_response(generate_failure_response("Malformed input"))
+            logging.warning('Malformed input: missing tool_calls property')
+            response = generate_failure_response('Malformed input.')
+        
+        logging.info(f'Sending response: {response}')
+        write_response(response)
+        
+        if cmd == SHUTDOWN_COMMAND:
+            logging.info('Shutdown command received, terminating plugin')
+            break
+    
+    logging.info('Keeper plugin stopped.')
+    return 0
 
 
 if __name__ == "__main__":

@@ -1,0 +1,54 @@
+{
+  "manifestVersion": 1,
+  "executable": "g-assist-plugin-keeper.exe",
+  "persistent": true,
+  "functions": [
+    {
+      "name": "memorize",
+      "description": "Cast a memory spell to preserve your current desktop realm with all mystical windows and ethereal browser tabs",
+      "tags": ["memorize", "enchant", "bind", "spell", "magic", "workspace", "desktop", "realm", "preserve"],
+      "properties": {
+        "realm_name": {
+          "type": "string",
+          "description": "The mystical name for this preserved realm"
+        }
+      }
+    },
+    {
+      "name": "recall",
+      "description": "Summon a previously memorized realm back from the ethereal plane, restoring all windows and tabs",
+      "tags": ["recall", "summon", "conjure", "realm", "magic", "workspace", "invoke", "resurrect"],
+      "properties": {
+        "realm_name": {
+          "type": "string",
+          "description": "The name of the realm to summon forth"
+        }
+      }
+    },
+    {
+      "name": "grimoire",
+      "description": "Consult the mystical grimoire to view all memorized realms and their arcane details",
+      "tags": ["grimoire", "chronicle", "tome", "library", "realms", "spellbook", "archive", "catalog"]
+    },
+    {
+      "name": "snapshot",
+      "description": "Instantly crystallize the current realm with a time-stamped enchantment",
+      "tags": ["snapshot", "freeze", "crystallize", "instant", "quick", "temporal", "moment", "flash"]
+    },
+    {
+      "name": "timeshift",
+      "description": "Warp through the temporal vortex to your most recently memorized realm",
+      "tags": ["timeshift", "portal", "warp", "temporal", "recent", "journey", "traverse", "dimension"]
+    },
+    {
+      "name": "vanish",
+      "description": "Memorize the current realm then cast a vanishing spell on all windows for a pristine desktop",
+      "tags": ["vanish", "dispel", "banish", "cleanse", "purify", "ethereal", "disappear", "void"]
+    },
+    {
+      "name": "shroud",
+      "description": "Memorize the current realm then cast a shrouding veil to conceal all windows",
+      "tags": ["shroud", "veil", "cloak", "conceal", "mystify", "shadow", "obscure", "mist"]
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-:: This batch file converts the Context Keeper plugin into a Windows executable
+:: This batch file converts the Keeper plugin into a Windows executable
 @echo off
 setlocal
 
@@ -18,8 +18,8 @@ set PYTHON=python3
 :build
 set VENV=..\venv
 set DIST_DIR=dist
-set PLUGIN_NAME=context-keeper
-set PLUGIN_DIR=%DIST_DIR%\%PLUGIN_NAME%
+set PLUGIN_NAME=g-assist-plugin-keeper
+set PLUGIN_DIR=%DIST_DIR%\keeper
 
 if exist %VENV% (
     echo Activating virtual environment...
@@ -34,7 +34,7 @@ if exist %VENV% (
 
     :: Build the executable with all dependencies
     echo.
-    echo Building Context Keeper plugin...
+    echo Building Keeper plugin...
     pyinstaller --onefile ^
         --name %PLUGIN_NAME% ^
         --distpath "%PLUGIN_DIR%" ^
@@ -68,10 +68,10 @@ if exist %VENV% (
     )
 
     :: Create a simple batch launcher for testing
-    echo @echo off > "%PLUGIN_DIR%\run-context-keeper.bat"
-    echo echo Starting Context Keeper Plugin... >> "%PLUGIN_DIR%\run-context-keeper.bat"
-    echo %PLUGIN_NAME%.exe >> "%PLUGIN_DIR%\run-context-keeper.bat"
-    echo pause >> "%PLUGIN_DIR%\run-context-keeper.bat"
+    echo @echo off > "%PLUGIN_DIR%\run-keeper.bat"
+    echo echo Starting Keeper Plugin... >> "%PLUGIN_DIR%\run-keeper.bat"
+    echo %PLUGIN_NAME%.exe >> "%PLUGIN_DIR%\run-keeper.bat"
+    echo pause >> "%PLUGIN_DIR%\run-keeper.bat"
 
     call %VENV%\Scripts\deactivate.bat
 
