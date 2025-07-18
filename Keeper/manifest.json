@@ -43,12 +43,61 @@
     {
       "name": "clear_windows",
       "description": "Saves the current workspace then closes all windows for a clean desktop",
-      "tags": ["clear", "close", "clean", "windows", "everything", "all", "fresh"]
+      "tags": ["clear", "close", "clean", "windows", "everything", "all", "fresh", "quit", "aggressive"],
+      "properties": {
+        "aggressive": {
+          "type": "boolean",
+          "description": "Force close applications even if they have unsaved work (use with caution!)"
+        }
+      }
     },
     {
       "name": "minimize_windows",
-      "description": "Saves the current workspace then minimizes all windows to show desktop",
+      "description": "Saves the current workspace then minimizes all windows except whitelisted apps",
       "tags": ["minimize", "hide", "desktop", "windows", "all", "everything"]
+    },
+    {
+      "name": "add_to_whitelist",
+      "description": "Add an application to the minimize whitelist so it won't be minimized",
+      "tags": ["whitelist", "add", "keep", "exclude", "protect", "app"],
+      "properties": {
+        "app_name": {
+          "type": "string",
+          "description": "The application name or window title pattern to whitelist"
+        }
+      }
+    },
+    {
+      "name": "remove_from_whitelist",
+      "description": "Remove an application from the minimize whitelist",
+      "tags": ["whitelist", "remove", "delete", "unprotect", "app"],
+      "properties": {
+        "app_name": {
+          "type": "string",
+          "description": "The application name to remove from whitelist"
+        }
+      }
+    },
+    {
+      "name": "list_whitelist",
+      "description": "Show all applications in the minimize whitelist",
+      "tags": ["whitelist", "list", "show", "protected", "apps", "display"]
+    },
+    {
+      "name": "clear_history",
+      "description": "Delete a specific saved workspace/context permanently",
+      "tags": ["clear", "delete", "remove", "history", "workspace", "context", "clean"],
+      "properties": {
+        "context_name": {
+          "type": "string",
+          "description": "The name of the context to delete"
+        }
+      }
+    },
+    {
+      "name": "clear_all_history",
+      "description": "Delete ALL saved workspaces/contexts permanently - use with caution!",
+      "tags": ["clear", "delete", "remove", "all", "history", "everything", "reset", "clean"]
     }
   ]
 }
