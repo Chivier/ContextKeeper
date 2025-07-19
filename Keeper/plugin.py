@@ -30,10 +30,7 @@ except ImportError:
 from environment_manager import EnvironmentManager
 from windows_context_manager import WindowsContextManager, WindowInfo
 from browser_tab_extractor import BrowserTabExtractor
-try:
-    from browser_tab_extractor_fast import FastBrowserTabExtractor
-except ImportError:
-    FastBrowserTabExtractor = None
+from browser_tab_saver import BrowserTabSaver
 from terminal_manager import TerminalManager
 from ide_tracker import IDETracker
 from document_tracker import DocumentTracker
@@ -75,7 +72,7 @@ class ContextKeeper:
         self.env_manager = EnvironmentManager()
         self.windows_manager = WindowsContextManager()
         self.browser_extractor = BrowserTabExtractor()
-        self.fast_browser_extractor = FastBrowserTabExtractor() if FastBrowserTabExtractor else None
+        self.browser_saver = BrowserTabSaver()
         self.terminal_manager = TerminalManager()
         self.ide_tracker = IDETracker()
         self.document_tracker = DocumentTracker()
@@ -318,8 +315,8 @@ class ContextKeeper:
         tabs_result = []
         active_index = 0
         
-        # Use fast extractor in quick mode
-        extractor = self.fast_browser_extractor if (quick_mode and self.fast_browser_extractor) else self.browser_extractor
+        # Always use standard extractor
+        extractor = self.browser_extractor
         
         if browser_type == 'chrome':
             result = extractor.extract_chrome_tabs()
